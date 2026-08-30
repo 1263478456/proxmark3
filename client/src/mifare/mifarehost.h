@@ -66,6 +66,7 @@ typedef struct {
     //uint8_t foundKey[2];
 } icesector_t;
 
+#define MFC_CHKKEYS_FAST_MAX_KEYS ((g_conn.pm3_cmd_data_size - sizeof(mf_chkkeys_fast_t)) / 6)
 #define KEYS_IN_BLOCK   ((g_conn.pm3_cmd_data_size - 5) / MIFARE_KEY_SIZE)
 #define KEYBLOCK_SIZE   (KEYS_IN_BLOCK * MIFARE_KEY_SIZE)
 #define CANDIDATE_SIZE  (0xFFFF * MIFARE_KEY_SIZE)

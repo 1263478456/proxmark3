@@ -64,19 +64,17 @@ static int usart_txrx(uint8_t *srcdata, size_t srclen, uint8_t *dstdata, size_t 
     struct payload_header {
         uint32_t waittime;
     } PACKED;
-    struct {
-        struct payload_header header;
-        uint8_t data[g_conn.pm3_cmd_data_size - sizeof(uint32_t)];
-    } PACKED payload;
+    uint8_t payload[g_conn.pm3_cmd_data_size];
+    struct payload_header ph;
+    ph.waittime = waittime;
+    memcpy(payload, &ph, sizeof(ph));
 
-    payload.header.waittime = waittime;
-
-    if (srclen >= sizeof(payload.data)) {
+    if (srclen >= sizeof(payload) - sizeof(ph)) {
         return PM3_EOVFLOW;
     }
 
-    memcpy(payload.data, srcdata, srclen);
-    SendCommandNG(CMD_USART_TXRX, (uint8_t *)&payload, srclen + sizeof(payload.header));
+    memcpy(payload + sizeof(ph), srcdata, srclen);
+    SendCommandNG(CMD_USART_TXRX, (uint8_t *)&payload, srclen + sizeof(ph));
     PacketResponseNG resp;
     if (WaitForResponseTimeout(CMD_USART_TXRX, &resp, waittime + 500) == false) {
         return PM3_ETIMEOUT;

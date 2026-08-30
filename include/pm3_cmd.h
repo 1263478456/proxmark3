@@ -25,7 +25,7 @@
 // Use it e.g. when using slow links such as BT
 #define USART_SLOW_LINK
 
-#define PM3_CMD_DATA_SIZE 624
+#define PM3_CMD_DATA_SIZE 512
 // OLD frames are pinned at 512 independently of PM3_CMD_DATA_SIZE:
 // the bootloader only speaks OLD
 #define PM3_CMD_DATA_SIZE_OLD 512
@@ -545,9 +545,6 @@ typedef struct {
     uint16_t singlesector_params;
     uint8_t keys[];             // key_count * MIFARE_KEY_SIZE
 } PACKED mf_chkkeys_fast_t;
-
-// most keys that fit alongside the header in one frame
-#define MFC_CHKKEYS_FAST_MAX_KEYS ((PM3_CMD_DATA_SIZE - sizeof(mf_chkkeys_fast_t)) / 6)
 
 // CMD_HF_MIFARE_VALUE payload.
 // Replaces a 34 byte blob addressed by hardcoded offsets:

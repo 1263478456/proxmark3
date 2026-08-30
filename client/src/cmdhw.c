@@ -2397,16 +2397,16 @@ void pm3_version_short(void) {
                 uint32_t id;
                 uint32_t section_size;
                 uint32_t versionstr_len;
-                char versionstr[g_conn.pm3_cmd_data_size - 12];
             } PACKED;
 
             struct p *payload = (struct p *)&resp.data.asBytes;
+            char *versionstr = (char *)(resp.data.asBytes + sizeof(struct p));
 
             // Flash size (bytes) is appended after the version string by newer
             // firmware; 0 if the device didn't send it (older firmware).
             uint32_t flash_size = 0;
             if (resp.length >= 12 + payload->versionstr_len + sizeof(uint32_t)) {
-                memcpy(&flash_size, payload->versionstr + payload->versionstr_len, sizeof(flash_size));
+                memcpy(&flash_size, versionstr + payload->versionstr_len, sizeof(flash_size));
             }
 
             lookup_chipid_short(payload->id, payload->section_size, flash_size);
@@ -2442,7 +2442,7 @@ void pm3_version_short(void) {
             PrintAndLogEx(NORMAL, "    Client.... %s", temp);
 
             bool armsrc_mismatch = false;
-            char *ptr = strstr(payload->versionstr, "OS......... ");
+            char *ptr = strstr(versionstr, "OS......... ");
             if (ptr != NULL) {
                 ptr = strstr(ptr, "\n");
                 if ((ptr != NULL) && (strlen(g_version_information.armsrc) == 9)) {
@@ -2453,7 +2453,7 @@ void pm3_version_short(void) {
             }
 
             // bootrom
-            ptr = strstr(payload->versionstr, "Bootrom.... ");
+            ptr = strstr(versionstr, "Bootrom.... ");
             if (ptr != NULL) {
                 char *ptr_end = strstr(ptr, "\n");
                 if (ptr_end != NULL) {
@@ -2463,7 +2463,7 @@ void pm3_version_short(void) {
             }
 
             // os:
-            ptr = strstr(payload->versionstr, "OS......... ");
+            ptr = strstr(versionstr, "OS......... ");
             if (ptr != NULL) {
                 char *ptr_end = strstr(ptr, "\n");
                 if (ptr_end != NULL) {
@@ -2599,13 +2599,13 @@ void pm3_version(bool verbose, bool oneliner) {
                 uint32_t id;
                 uint32_t section_size;
                 uint32_t versionstr_len;
-                char versionstr[g_conn.pm3_cmd_data_size - 12];
             } PACKED;
 
             struct p *payload = (struct p *)&resp.data.asBytes;
+            char *versionstr = (char *)(resp.data.asBytes + sizeof(struct p));
 
             bool armsrc_mismatch = false;
-            char *ptr = strstr(payload->versionstr, "OS......... ");
+            char *ptr = strstr(versionstr, "OS......... ");
             if (ptr != NULL) {
                 ptr = strstr(ptr, "\n");
                 if ((ptr != NULL) && (strlen(g_version_information.armsrc) == 9)) {
@@ -2614,10 +2614,10 @@ void pm3_version(bool verbose, bool oneliner) {
                     }
                 }
             }
-            PrintAndLogEx(NORMAL, payload->versionstr);
+            PrintAndLogEx(NORMAL, versionstr);
             // PM5 doesn't report a built-in FPGA version (Gowin bitstream is loaded
             // externally), so skip the Xilinx FPGA_TYPE match check for it.
-            if (!IfPm5() && strstr(payload->versionstr, FPGA_TYPE) == NULL) {
+            if (!IfPm5() && strstr(versionstr, FPGA_TYPE) == NULL) {
                 PrintAndLogEx(NORMAL, "  FPGA firmware... %s", _RED_("chip mismatch"));
             }
 
@@ -2625,7 +2625,7 @@ void pm3_version(bool verbose, bool oneliner) {
             // firmware; 0 if the device didn't send it (older firmware).
             uint32_t flash_size = 0;
             if (resp.length >= 12 + payload->versionstr_len + sizeof(uint32_t)) {
-                memcpy(&flash_size, payload->versionstr + payload->versionstr_len, sizeof(flash_size));
+                memcpy(&flash_size, versionstr + payload->versionstr_len, sizeof(flash_size));
             }
 
             lookupChipID(payload->id, payload->section_size, flash_size);

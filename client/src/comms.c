@@ -322,12 +322,12 @@ static void PacketResponseReceived(PacketResponseNG *packet) {
             if (packet->ng) {
                 struct d {
                     uint16_t flag;
-                    uint8_t buf[g_conn.pm3_cmd_data_size - sizeof(uint16_t)];
                 } PACKED;
                 const struct d *data = (struct d *)&packet->data.asBytes;
-                len = packet->length - sizeof(data->flag);
+                uint8_t *buf = packet->data.asBytes + sizeof(struct d);
+                len = packet->length - sizeof(struct d);
                 flag = data->flag;
-                memcpy(s, data->buf, len);
+                memcpy(s, buf, len);
             } else {
                 len = MIN(packet->oldarg[0], g_conn.pm3_cmd_data_size);
                 flag = packet->oldarg[1];

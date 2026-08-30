@@ -565,9 +565,9 @@ static int ul3pass_authentication(const uint8_t *key, uint8_t keyno, bool switch
     struct rp {
         uint32_t auths;
         uint32_t ticks;
-        uint8_t nonces[g_conn.pm3_cmd_data_size - sizeof(uint32_t) * 2];
     } PACKED;
     struct rp *rpayload = (struct rp *) resp.data.asBytes;
+    uint8_t *nonces_ptr = resp.data.asBytes + sizeof(struct rp);
 
     if (auths != NULL) {
         *auths += rpayload->auths;
@@ -576,7 +576,7 @@ static int ul3pass_authentication(const uint8_t *key, uint8_t keyno, bool switch
         *ms += rpayload->ticks;
     }
     if (get_nonces && nonces != NULL) {
-        memcpy(nonces, rpayload->nonces, MIN(sizeof(rpayload->nonces), rpayload->auths * (keyno == 3 ? 8 : 16)));
+        memcpy(nonces, nonces_ptr, MIN(g_conn.pm3_cmd_data_size - sizeof(struct rp), rpayload->auths * (keyno == 3 ? 8 : 16)));
     }
     return resp.status;
 }

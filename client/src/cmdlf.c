@@ -281,8 +281,6 @@ static int CmdLFTune(const char *Cmd) {
     return PM3_SUCCESS;
 }
 
-#define PAYLOAD_HEADER_SIZE (12 + (3 * LF_CMDREAD_MAX_EXTRA_SYMBOLS))
-
 /* send a LF command before reading */
 int CmdLFCommandRead(const char *Cmd) {
     CLIParserContext *ctx;
@@ -316,7 +314,17 @@ int CmdLFCommandRead(const char *Cmd) {
     CLIExecWithReturn(ctx, Cmd, argtable, false);
     uint32_t delay = arg_get_u32_def(ctx, 1, 0);
 
-    char cmd[g_conn.pm3_cmd_data_size - PAYLOAD_HEADER_SIZE];
+    struct p {
+        uint32_t delay;
+        uint16_t period_0;
+        uint16_t period_1;
+        uint8_t  symbol_extra[LF_CMDREAD_MAX_EXTRA_SYMBOLS];
+        uint16_t period_extra[LF_CMDREAD_MAX_EXTRA_SYMBOLS];
+        uint32_t samples : 30;
+        bool     keep_field_on : 1;
+        bool     verbose : 1;
+    } PACKED;
+    char cmd[g_conn.pm3_cmd_data_size - sizeof(struct p)];
     memset(cmd, 0, sizeof(cmd));
     int cmd_len = sizeof(cmd) - 1; // CLIGetStrWithReturn does not guarantee string to be null-terminated
     CLIGetStrWithReturn(ctx, 2, (uint8_t *)cmd, &cmd_len);
@@ -340,27 +348,18 @@ int CmdLFCommandRead(const char *Cmd) {
         return PM3_ENOTTY;
     }
 
-    struct p {
-        uint32_t delay;
-        uint16_t period_0;
-        uint16_t period_1;
-        uint8_t  symbol_extra[LF_CMDREAD_MAX_EXTRA_SYMBOLS];
-        uint16_t period_extra[LF_CMDREAD_MAX_EXTRA_SYMBOLS];
-        uint32_t samples : 30;
-        bool     keep_field_on : 1;
-        bool     verbose : 1;
-        uint8_t data[g_conn.pm3_cmd_data_size - PAYLOAD_HEADER_SIZE];
-    } PACKED payload;
-    payload.delay = delay;
-    payload.period_1 = period_1;
-    payload.period_0 = period_0;
-    payload.samples = samples;
-    payload.keep_field_on = keep_field_on;
-    payload.verbose = verbose;
-    memset(payload.symbol_extra, 0, sizeof(payload.symbol_extra));
-    memset(payload.period_extra, 0, sizeof(payload.period_extra));
+    uint8_t payload[g_conn.pm3_cmd_data_size];
+    struct p *payload_header = (struct p *)payload;
+    payload_header->delay = delay;
+    payload_header->period_1 = period_1;
+    payload_header->period_0 = period_0;
+    payload_header->samples = samples;
+    payload_header->keep_field_on = keep_field_on;
+    payload_header->verbose = verbose;
+    memset(payload_header->symbol_extra, 0, sizeof(payload_header->symbol_extra));
+    memset(payload_header->period_extra, 0, sizeof(payload_header->period_extra));
 
-    if (cmd_len > sizeof(payload.data) - 8 * add_crc_ht - 1) {
+    if (cmd_len > sizeof(payload) - sizeof(struct p) - 8 * add_crc_ht - 1) {
         PrintAndLogEx(ERR, "cmd too long, max length is %zu", sizeof(cmd) - 1);
         return PM3_EINVARG;
     }
@@ -407,7 +406,7 @@ int CmdLFCommandRead(const char *Cmd) {
         }
     }
 
-    memcpy(payload.data, cmd, cmd_len + 1);
+    memcpy(payload + sizeof(struct p), cmd, cmd_len + 1);
 
     // extra symbol definition
     uint8_t index_extra = 0;
@@ -415,9 +414,9 @@ int CmdLFCommandRead(const char *Cmd) {
     for (; i < extra_arg_len;) {
 
         if (index_extra < LF_CMDREAD_MAX_EXTRA_SYMBOLS) {
-            payload.symbol_extra[index_extra] = extra_arg[i];
+            payload_header->symbol_extra[index_extra] = extra_arg[i];
             int tmp = atoi(extra_arg + (i + 1));
-            payload.period_extra[index_extra] = tmp;
+            payload_header->period_extra[index_extra] = tmp;
             index_extra++;
             i++;
             while (extra_arg[i] >= 0x30 && extra_arg[i] <= 0x39)
@@ -430,8 +429,8 @@ int CmdLFCommandRead(const char *Cmd) {
     }
 
     // bitbang mode
-    if (payload.delay == 0) {
-        if (payload.period_0 < 7 || payload.period_1 < 7) {
+    if (payload_header->delay == 0) {
+        if (payload_header->period_0 < 7 || payload_header->period_1 < 7) {
             PrintAndLogEx(ERR, "periods cannot be less than 7us in bit bang mode");
             return PM3_EINVARG;
         }
@@ -439,20 +438,20 @@ int CmdLFCommandRead(const char *Cmd) {
 
     PrintAndLogEx(DEBUG, _CYAN_("Cmd read - settings"));
     PrintAndLogEx(DEBUG, "--------------------");
-    PrintAndLogEx(DEBUG, "Delay..... " _YELLOW_("%u"), payload.delay);
-    PrintAndLogEx(DEBUG, "Zero...... " _YELLOW_("%u"), payload.period_0);
-    PrintAndLogEx(DEBUG, "One....... " _YELLOW_("%u"), payload.period_1);
-    PrintAndLogEx(DEBUG, "Samples... " _YELLOW_("%u"), payload.samples);
+    PrintAndLogEx(DEBUG, "Delay..... " _YELLOW_("%u"), payload_header->delay);
+    PrintAndLogEx(DEBUG, "Zero...... " _YELLOW_("%u"), payload_header->period_0);
+    PrintAndLogEx(DEBUG, "One....... " _YELLOW_("%u"), payload_header->period_1);
+    PrintAndLogEx(DEBUG, "Samples... " _YELLOW_("%u"), payload_header->samples);
     PrintAndLogEx(DEBUG, "");
     PrintAndLogEx(DEBUG, _CYAN_("Extra symbols"));
     for (i = 0; i < LF_CMDREAD_MAX_EXTRA_SYMBOLS; i++) {
-        if (payload.symbol_extra[i] == 0x00)
+        if (payload_header->symbol_extra[i] == 0x00)
             continue;
 
-        PrintAndLogEx(DEBUG, "%c......... " _YELLOW_("%u"), payload.symbol_extra[i], payload.period_extra[i]);
+        PrintAndLogEx(DEBUG, "%c......... " _YELLOW_("%u"), payload_header->symbol_extra[i], payload_header->period_extra[i]);
     }
     PrintAndLogEx(DEBUG, "");
-    PrintAndLogEx(DEBUG, "Cmd....... " _YELLOW_("%s"), payload.data);
+    PrintAndLogEx(DEBUG, "Cmd....... " _YELLOW_("%s"), payload + sizeof(struct p));
     PrintAndLogEx(DEBUG, "");
 
     if (cm) {
@@ -466,7 +465,7 @@ int CmdLFCommandRead(const char *Cmd) {
     int ret = PM3_SUCCESS;
     do {
         clearCommandBuffer();
-        SendCommandNG(CMD_LF_MOD_THEN_ACQ_RAW_ADC, (uint8_t *)&payload, PAYLOAD_HEADER_SIZE + cmd_len + 1);
+        SendCommandNG(CMD_LF_MOD_THEN_ACQ_RAW_ADC, (uint8_t *)&payload, sizeof(struct p) + cmd_len + 1);
 
         // init to ZERO
         PacketResponseNG resp;
@@ -1055,8 +1054,8 @@ int lfsim_upload_gb(void) {
     struct pupload {
         uint8_t flag;
         uint16_t offset;
-        uint8_t data[g_conn.pm3_cmd_data_size - 3];
     } PACKED payload_up;
+    uint8_t payload[g_conn.pm3_cmd_data_size];
 
     // flag =
     //    b0  0
@@ -1070,16 +1069,17 @@ int lfsim_upload_gb(void) {
 
     //can send only 512 bits at a time (1 byte sent per bit...)
     PrintAndLogEx(INFO, "." NOLF);
-    for (size_t i = 0; i < g_GraphTraceLen; i += g_conn.pm3_cmd_data_size - 3) {
+    for (size_t i = 0; i < g_GraphTraceLen; i += sizeof(payload) - sizeof(struct pupload)) {
 
-        size_t len = MIN((g_GraphTraceLen - i), g_conn.pm3_cmd_data_size - 3);
+        size_t len = MIN((g_GraphTraceLen - i), sizeof(payload) - sizeof(struct pupload));
         clearCommandBuffer();
         payload_up.offset = i;
+        memcpy(payload, &payload_up, sizeof(struct pupload));
 
         for (size_t j = 0; j < len; j++)
-            payload_up.data[j] = g_GraphBuffer[i + j];
+            payload[sizeof(struct pupload) + j] = g_GraphBuffer[i + j];
 
-        SendCommandNG(CMD_LF_UPLOAD_SIM_SAMPLES, (uint8_t *)&payload_up, sizeof(struct pupload));
+        SendCommandNG(CMD_LF_UPLOAD_SIM_SAMPLES, payload, sizeof(payload));
         WaitForResponse(CMD_LF_UPLOAD_SIM_SAMPLES, &resp);
         if (resp.status != PM3_SUCCESS) {
             PrintAndLogEx(INFO, "Bigbuf is full");

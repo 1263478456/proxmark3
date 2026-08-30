@@ -202,7 +202,7 @@ static int infoHFST25TA(void) {
 
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     // ---------------  Select NDEF Tag application ----------------
@@ -402,7 +402,7 @@ int CmdHFST25TANdefRead(const char *Cmd) {
 
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     // ---------------  Select NDEF Tag application ----------------
@@ -573,7 +573,7 @@ static int CmdHFST25TAProtect(const char *Cmd) {
 
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     // ---------------  Select NDEF Tag application ----------------
@@ -717,7 +717,7 @@ static int CmdHFST25TAPwd(const char *Cmd) {
 
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     // ---------------  Select NDEF Tag application ----------------

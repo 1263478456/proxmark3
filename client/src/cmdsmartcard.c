@@ -506,7 +506,8 @@ static int CmdSmartRaw(const char *Cmd) {
     int timeout = arg_get_int_def(ctx, 7, -1);
 
     int dlen = 0;
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     int res = CLIParamHexToBuf(arg_get_str(ctx, 8), data, sizeof(data), &dlen);
     CLIParserFree(ctx);
 
@@ -557,7 +558,7 @@ static int CmdSmartRaw(const char *Cmd) {
         payload->flags |= proto;
     }
 
-    uint8_t *buf = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    uint8_t *buf = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (buf == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         free(payload);
@@ -572,7 +573,7 @@ static int CmdSmartRaw(const char *Cmd) {
     }
 
     // reading response from smart card
-    int len = smart_response(buf, PM3_CMD_DATA_SIZE, (dlen > 0) ? data[0] : 0x00, proto);
+    int len = smart_response(buf, g_conn.pm3_cmd_data_size, (dlen > 0) ? data[0] : 0x00, proto);
     if (len < 0) {
         free(payload);
         free(buf);
@@ -590,7 +591,7 @@ static int CmdSmartRaw(const char *Cmd) {
         clearCommandBuffer();
         SendCommandNG(CMD_SMART_RAW, (uint8_t *)payload, sizeof(smart_card_raw_t) + dlen);
 
-        len = smart_response(buf, PM3_CMD_DATA_SIZE, data[0], proto);
+        len = smart_response(buf, g_conn.pm3_cmd_data_size, data[0], proto);
 
         data[4] = 0;
     }
@@ -1095,7 +1096,7 @@ static int CmdSmartList(const char *Cmd) {
 
 static void smart_brute_prim(void) {
 
-    uint8_t *buf = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    uint8_t *buf = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (buf == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         return;
@@ -1127,7 +1128,7 @@ static void smart_brute_prim(void) {
         SendCommandNG(CMD_SMART_RAW, (uint8_t *)payload, sizeof(smart_card_raw_t) + 5);
         free(payload);
 
-        int len = smart_responseEx(buf, PM3_CMD_DATA_SIZE, false, get_card_data[i], SC_RAW);
+        int len = smart_responseEx(buf, g_conn.pm3_cmd_data_size, false, get_card_data[i], SC_RAW);
         if (len > 2) {
             PrintAndLogEx(SUCCESS, "\tHEX  %d |: %s", len, sprint_hex(buf, len));
         }
@@ -1137,7 +1138,7 @@ static void smart_brute_prim(void) {
 
 static int smart_brute_sfi(bool decodeTLV) {
 
-    uint8_t *buf = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    uint8_t *buf = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (buf == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         return 1;
@@ -1177,7 +1178,7 @@ static int smart_brute_sfi(bool decodeTLV) {
             clearCommandBuffer();
             SendCommandNG(CMD_SMART_RAW, (uint8_t *)payload, sizeof(smart_card_raw_t) +  sizeof(READ_RECORD));
 
-            len = smart_responseEx(buf, PM3_CMD_DATA_SIZE, false, READ_RECORD[0], SC_RAW);
+            len = smart_responseEx(buf, g_conn.pm3_cmd_data_size, false, READ_RECORD[0], SC_RAW);
 
             if (len >= 2 && buf[len - 2] == 0x6C) {
                 READ_RECORD[4] = buf[len - 1];
@@ -1185,7 +1186,7 @@ static int smart_brute_sfi(bool decodeTLV) {
                 memcpy(payload->data, READ_RECORD, sizeof(READ_RECORD));
                 clearCommandBuffer();
                 SendCommandNG(CMD_SMART_RAW, (uint8_t *)payload, sizeof(smart_card_raw_t) +  sizeof(READ_RECORD));
-                len = smart_responseEx(buf, PM3_CMD_DATA_SIZE, false, READ_RECORD[0], SC_RAW);
+                len = smart_responseEx(buf, g_conn.pm3_cmd_data_size, false, READ_RECORD[0], SC_RAW);
 
                 READ_RECORD[4] = 0;
             }
@@ -1204,7 +1205,7 @@ static int smart_brute_sfi(bool decodeTLV) {
                     }
                 }
             }
-            memset(buf, 0x00, PM3_CMD_DATA_SIZE);
+            memset(buf, 0x00, g_conn.pm3_cmd_data_size);
         }
     }
     free(buf);
@@ -1213,7 +1214,7 @@ static int smart_brute_sfi(bool decodeTLV) {
 
 static void smart_brute_options(bool decodeTLV) {
 
-    uint8_t *buf = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    uint8_t *buf = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (buf == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         return;
@@ -1236,7 +1237,7 @@ static void smart_brute_options(bool decodeTLV) {
     SendCommandNG(CMD_SMART_RAW, (uint8_t *)payload, sizeof(smart_card_raw_t) + sizeof(GET_PROCESSING_OPTIONS));
     free(payload);
 
-    int len = smart_responseEx(buf, PM3_CMD_DATA_SIZE, false, GET_PROCESSING_OPTIONS[0], SC_RAW);
+    int len = smart_responseEx(buf, g_conn.pm3_cmd_data_size, false, GET_PROCESSING_OPTIONS[0], SC_RAW);
     if (len > 4) {
         PrintAndLogEx(SUCCESS, "Got processing options");
         if (decodeTLV) {
@@ -1280,7 +1281,7 @@ static int CmdSmartBruteforceSFI(const char *Cmd) {
     json_t *root = NULL;
     smart_loadjson("aidlist", &root);
 
-    uint8_t *buf = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    uint8_t *buf = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (buf == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         return PM3_EMALLOC;
@@ -1335,7 +1336,7 @@ static int CmdSmartBruteforceSFI(const char *Cmd) {
         snprintf(caid, 8 + 2 + aidlen + 1, SELECT, aidlen >> 1, aid);
 
         int hexlen = 0;
-        uint8_t cmddata[PM3_CMD_DATA_SIZE];
+        uint8_t cmddata[g_conn.pm3_cmd_data_size];
         int res = param_gethex_to_eol(caid, 0, cmddata, sizeof(cmddata), &hexlen);
         if (res) {
             continue;
@@ -1358,7 +1359,7 @@ static int CmdSmartBruteforceSFI(const char *Cmd) {
         SendCommandNG(CMD_SMART_RAW, (uint8_t *)payload, sizeof(smart_card_raw_t) + hexlen);
         free(payload);
 
-        int len = smart_responseEx(buf, PM3_CMD_DATA_SIZE, false, (hexlen > 0) ? cmddata[0] : 0x00, SC_RAW);
+        int len = smart_responseEx(buf, g_conn.pm3_cmd_data_size, false, (hexlen > 0) ? cmddata[0] : 0x00, SC_RAW);
         if (len < 3) {
             continue;
         }

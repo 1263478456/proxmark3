@@ -5429,7 +5429,7 @@ int CmdHF14AMfELoad(const char *Cmd) {
     int cnt = 0;
 
     // 12 is the size of the struct the fct mf_eml_set_mem_xt uses to transfer to device
-    uint16_t max_avail_blocks = ((PM3_CMD_DATA_SIZE - 12) / block_width) * block_width;
+    uint16_t max_avail_blocks = ((g_conn.pm3_cmd_data_size - 12) / block_width) * block_width;
 
     while (bytes_read && cnt < block_cnt) {
         if (bytes_read == block_width) {
@@ -9404,7 +9404,7 @@ static int CmdHF14AGen4Save(const char *Cmd) {
         uint16_t bytes_left = bytes ;
 
         // 12 is the size of the struct the fct mf_eml_set_mem_xt uses to transfer to device
-        uint16_t max_avail_blocks = ((PM3_CMD_DATA_SIZE - 12) / MFBLOCK_SIZE) * MFBLOCK_SIZE;
+        uint16_t max_avail_blocks = ((g_conn.pm3_cmd_data_size - 12) / MFBLOCK_SIZE) * MFBLOCK_SIZE;
 
         while (bytes_left > 0 && cnt < block_cnt) {
             if (bytes_left == MFBLOCK_SIZE) {

@@ -1649,7 +1649,7 @@ static int hf15EmlSetMem(const uint8_t *data, uint16_t count, size_t offset) {
         uint8_t data[];
     } PACKED;
 
-    if (count > (PM3_CMD_DATA_SIZE - sizeof(struct p))) {
+    if (count > (g_conn.pm3_cmd_data_size - sizeof(struct p))) {
         return PM3_ESOFT;
     }
 
@@ -2569,17 +2569,18 @@ static int CmdHF15Raw(const char *Cmd) {
     bool read_respone = (arg_get_lit(ctx, 5) == false);
 
     int datalen = 0;
-    uint8_t data[PM3_CMD_DATA_SIZE] = { 0x00 };
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     CLIGetHexWithReturn(ctx, 6, data, &datalen);
 
     bool wait = arg_get_lit(ctx, 7);
     CLIParserFree(ctx);
 
-    datalen = (datalen >= PM3_CMD_DATA_SIZE) ? PM3_CMD_DATA_SIZE : datalen;
+    datalen = (datalen >= g_conn.pm3_cmd_data_size) ? g_conn.pm3_cmd_data_size : datalen;
 
     if (crc) {
 
-        if ((datalen - 2) < PM3_CMD_DATA_SIZE) {
+        if ((datalen - 2) < g_conn.pm3_cmd_data_size) {
             AddCrc15(data, datalen);
             datalen += 2;
         } else {

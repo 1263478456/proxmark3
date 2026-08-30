@@ -344,7 +344,7 @@ typedef struct {
 typedef struct {
     uint8_t *flags;
     felica_dump_system_t *system;
-    uint8_t block_frame[PM3_CMD_DATA_SIZE];
+    uint8_t block_frame[PM3_CMD_DATA_SIZE_OLD]; // TODO: Use g_conn.pm3_cmd_data_size
     uint16_t block_datalen;
     uint32_t retry_count;
     uint32_t service_count;
@@ -3228,7 +3228,10 @@ static void clear_and_send_command_ex(uint8_t flags, uint16_t datalen, uint8_t *
     // A bunch of code in this module adds length byte at data[0] regardless of that, which is wrong
     // This is a workaround to extract the actual payload correctly so that length byte isn't repeated
     // It also strips CRC if present, as ARMSRC adds it too
-    if (normalize_frame && data && datalen) {
+    if (data == NULL) {
+        // No payload at all; nothing to normalize or copy.
+        payload_len = 0;
+    } else if (normalize_frame && data && datalen) {
         if (datalen >= data[0] && data[0] > 0) {
             payload_len = data[0] - 1;
             if (payload_len > datalen - 1) {
@@ -3247,7 +3250,8 @@ static void clear_and_send_command_ex(uint8_t flags, uint16_t datalen, uint8_t *
         PrintAndLogEx(INFO, "Send raw command - Frame: %s", sprint_hex(payload, payload_len));
     }
 
-    uint8_t packet_buf[sizeof(felica_raw_cmd_t) + PM3_CMD_DATA_SIZE] = {0};
+    uint8_t packet_buf[sizeof(felica_raw_cmd_t) + g_conn.pm3_cmd_data_size];
+    memset(packet_buf, 0, sizeof(packet_buf));
     felica_raw_cmd_t *packet = (felica_raw_cmd_t *)packet_buf;
     packet->flags = flags;
     packet->numbits = numbits;
@@ -6203,7 +6207,7 @@ static int CmdHFFelicaAuthentication1(const char *Cmd) {
         return PM3_SUCCESS;
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
 
     // Length (1),
@@ -6384,7 +6388,7 @@ static int CmdHFFelicaAuthentication2(const char *Cmd) {
         return PM3_SUCCESS;
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
 
     uint16_t datalen = 18; // Length (1), Command ID (1), IDm (8), M4c (8)
@@ -6569,7 +6573,7 @@ static int CmdHFFelicaWritePlain(const char *Cmd) {
         return PM3_SUCCESS;
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
     data[0] = 0x20; // Static length
     data[1] = 0x08; // Command ID
@@ -6723,7 +6727,7 @@ static int CmdHFFelicaReadPlain(const char *Cmd) {
         return PM3_SUCCESS;
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
     data[0] = 0x10; // Static length
     data[1] = 0x06; // Command ID
@@ -6817,7 +6821,7 @@ static int CmdHFFelicaRequestResponse(const char *Cmd) {
 
     CLIParserFree(ctx);
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
     data[0] = 0x0A; // Static length
     data[1] = 0x04; // Command ID
@@ -6994,7 +6998,7 @@ static int CmdHFFelicaResetMode(const char *Cmd) {
     }
     CLIParserFree(ctx);
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
     data[0] = 0x0C; // Static length
     data[1] = 0x3E; // Command ID
@@ -7290,7 +7294,7 @@ static int CmdHFFelicaRequestService(const char *Cmd) {
     }
     CLIParserFree(ctx);
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
 
     if (all_nodes == false) {
@@ -8252,11 +8256,12 @@ static int felica_sim_model_from_json(json_t *root, felica_sim_model_t *model_ou
 
 static int felica_sim_send_control(uint8_t subcommand, uint32_t total_len, uint32_t offset, uint16_t model_crc,
                                    const uint8_t *data, uint16_t data_len, uint32_t timeout_ms) {
-    if (data_len > (PM3_CMD_DATA_SIZE - sizeof(felica_sim_upload_t))) {
+    if (data_len > (g_conn.pm3_cmd_data_size - sizeof(felica_sim_upload_t))) {
         return PM3_EOVFLOW;
     }
 
-    uint8_t packet[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t packet[g_conn.pm3_cmd_data_size];
+    memset(packet, 0, sizeof(packet));
     felica_sim_upload_t *payload = (felica_sim_upload_t *)packet;
     payload->subcommand = subcommand;
     payload->total_len = total_len;
@@ -8287,7 +8292,7 @@ static int felica_sim_upload_model(const felica_sim_model_t *model) {
         return ret;
     }
 
-    const uint16_t chunk_size = PM3_CMD_DATA_SIZE - sizeof(felica_sim_upload_t);
+    const uint16_t chunk_size = g_conn.pm3_cmd_data_size - sizeof(felica_sim_upload_t);
     uint32_t offset = 0;
     PrintAndLogEx(INFO, "Uploading simulator model");
     PrintAndLogEx(INFO, "." NOLF);
@@ -8782,7 +8787,7 @@ static int felica_internal_authentication(
     const felica_auth_context_t *auth_ctx,
     bool verbose) {
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
 
     uint8_t blk_numbers[1] = {FELICA_BLK_NUMBER_RC};
@@ -8874,7 +8879,7 @@ static int felica_external_authentication(
     bool keep) {
 
     // staging buffer for one CMD_HF_FELICA_COMMAND payload
-    uint8_t data[PM3_CMD_DATA_SIZE - sizeof(felica_raw_cmd_t)];
+    uint8_t data[g_conn.pm3_cmd_data_size - sizeof(felica_raw_cmd_t)];
     memset(data, 0, sizeof(data));
 
     uint8_t flags = (FELICA_APPEND_CRC | FELICA_RAW | FELICA_NO_DISCONNECT);
@@ -9400,7 +9405,7 @@ static int CmdHFFelicaCmdRaw(const char *Cmd) {
     bool active_select = arg_get_lit(ctx, 7);
 
     int datalen = 0;
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     memset(data, 0, sizeof(data));
 
     CLIGetHexWithReturn(ctx, 8, data, &datalen);
@@ -9437,8 +9442,8 @@ static int CmdHFFelicaCmdRaw(const char *Cmd) {
         return PM3_EINVARG;
     }
 
-    // Max transport buffer is PM3_CMD_DATA_SIZE
-    datalen = (datalen > PM3_CMD_DATA_SIZE) ? PM3_CMD_DATA_SIZE : datalen;
+    // Max transport buffer is g_conn.pm3_cmd_data_size
+    datalen = (datalen > g_conn.pm3_cmd_data_size) ? g_conn.pm3_cmd_data_size : datalen;
 
     PrintAndLogEx(SUCCESS, "Data: %s", sprint_hex(data, datalen));
 

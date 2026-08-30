@@ -41,6 +41,9 @@
 #include "cmac_calc.h"
 #include "usb_cdc_apis.h"
 
+#define ISO14A_RESP_LEN(x) (sizeof(iso14a_raw_resp_t) + (x))
+#define ISO14A_RESP_MAXLEN (PM3_CMD_DATA_SIZE - sizeof(iso14a_raw_resp_t))
+
 // Forward declaration: HID Config Card jam support (implemented in secc.c).
 // Called from SniffIso14443a when param bit 0x04 is set.
 bool hid_config_card_jam(const uint8_t *cmd, int len, uint8_t *dma_buf);

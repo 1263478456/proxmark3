@@ -331,7 +331,7 @@ static int seos_get_data(uint8_t *rndICC, uint8_t *rndIFD, uint8_t *diversified_
     //PrintAndLogEx(SUCCESS, "Command.......................... " _YELLOW_("%s"), completedCommandChar);
 
     // ------------------- Send Command -------------------
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     bool activate_field = false;
@@ -484,7 +484,7 @@ static int seos_write_data(uint8_t *rndICC, uint8_t *rndIFD, uint8_t *diversifie
     // PrintAndLogEx(SUCCESS, "Command.......................... " _YELLOW_("%s"), completedCommandChar);
 
     // ------------------- Send Command -------------------
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     bool activate_field = false;
@@ -598,7 +598,7 @@ static void create_mutual_auth_key(uint8_t *KEYIFD, uint8_t *KEYICC, uint8_t *RN
 }
 
 static int seos_challenge_get(uint8_t *RNDICC, uint8_t RNDICC_len, uint8_t keyslot) {
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     bool activate_field = false;
@@ -1021,7 +1021,7 @@ static int select_ADF_decrypt(const char *selectADFOID, uint8_t *CRYPTOGRAM_encr
 };
 
 static int seos_mutual_auth(uint8_t *adfOID, size_t adfoid_len, uint8_t *randomICC, uint8_t *CRYPTOGRAM_Diversifier, uint8_t diversifier_len, uint8_t *mutual_auth_randomIFD, uint8_t *mutual_auth_keyICC, uint8_t *randomIFD, uint8_t randomIFD_len, uint8_t *keyIFD, uint8_t keyIFD_len, int encryption_algorithm, int hash_algorithm, int auth_key_index, uint8_t auth_key_slot) {
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
 
     // ---------------- Diversify Keys ----------------
     uint8_t mk[16] = { 0x00 };
@@ -1174,7 +1174,7 @@ static int seos_mutual_auth(uint8_t *adfOID, size_t adfoid_len, uint8_t *randomI
 };
 
 static int seos_try_aid_select(const uint8_t *aid, int aid_len, bool activate_field, bool keep_field_on) {
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     uint8_t aSELECT_AID[5 + MAX_SEOS_AID_LEN + 1] = {0};
@@ -1245,7 +1245,7 @@ static int seos_aid_select(const uint8_t *custom_aid, int custom_aid_len) {
 
 static int seos_pacs_adf_select(char *oid, int oid_len, uint8_t *data_tag, int data_tag_len, int privacy_key_index, int auth_key_index, uint8_t *write, int write_len) {
     int resplen = 0;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     bool activate_field = false;
     bool keep_field_on = true;
 
@@ -1375,7 +1375,7 @@ static int seos_pacs_adf_select(char *oid, int oid_len, uint8_t *data_tag, int d
         create_mutual_auth_key(KeyIFD, KeyICC, RNDICC, RNDIFD, Diversified_New_EncryptionKey, Diversified_New_MACKey, ALGORITHM_INFO_value1, ALGORITHM_INFO_value2);
 
         if (write == NULL) {
-            uint8_t sio_buffer_out[PM3_CMD_DATA_SIZE];
+            uint8_t sio_buffer_out[g_conn.pm3_cmd_data_size];
             int sio_size = 0;
             res = seos_get_data(RNDICC, RNDIFD, Diversified_New_EncryptionKey, Diversified_New_MACKey, sio_buffer_out, &sio_size, ALGORITHM_INFO_value1, data_tag, data_tag_len);
             if (res != PM3_SUCCESS) {
@@ -1412,7 +1412,7 @@ static int seos_pacs_adf_select(char *oid, int oid_len, uint8_t *data_tag, int d
 
 static int seos_adf_select(char *oid, int oid_len, int privacy_key_index, int auth_key_index) {
     int resplen = 0;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     bool activate_field = false;
     bool keep_field_on = true;
 
@@ -1505,7 +1505,7 @@ static int seos_adf_select(char *oid, int oid_len, int privacy_key_index, int au
 };
 
 static int seos_gdf_select(int key_index) {
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     bool activate_field = false;
@@ -2317,11 +2317,12 @@ static int CmdHfSeosSAM(const char *Cmd) {
         flags |= BITMASK(1);
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     data[0] = flags;
 
     int cmdlen = 0;
-    if (CLIParamHexToBuf(arg_get_str(ctx, 5), data + 1, PM3_CMD_DATA_SIZE - 1, &cmdlen) != PM3_SUCCESS) {
+    if (CLIParamHexToBuf(arg_get_str(ctx, 5), data + 1, g_conn.pm3_cmd_data_size - 1, &cmdlen) != PM3_SUCCESS) {
         CLIParserFree(ctx);
         return PM3_ESOFT;
     }

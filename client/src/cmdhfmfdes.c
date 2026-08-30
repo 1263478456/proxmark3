@@ -8350,7 +8350,8 @@ static int duox_intauth_exchange(bool apdu_logging, bool verbose, uint8_t keynum
     if (apdu_logging)
         PrintAndLogEx(SUCCESS, ">>>> %s", sprint_hex(encoded, encoded_len));
 
-    uint8_t response[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     int resplen = 0;
     int res = ExchangeAPDU14a(encoded, encoded_len, false, true, response, sizeof(response), &resplen);
     if (res != PM3_SUCCESS) {
@@ -8686,7 +8687,8 @@ static int CmdHF14ADesVdeSign(const char *Cmd) {
     if (APDULogging)
         PrintAndLogEx(SUCCESS, ">>>> %s", sprint_hex(encoded, encoded_len));
 
-    uint8_t response[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     int resplen = 0;
     int res = ExchangeAPDU14a(encoded, encoded_len, false, true, response, sizeof(response), &resplen);
     if (res != PM3_SUCCESS) {
@@ -9108,7 +9110,8 @@ static int duox_vde_sign_exchange(bool apdu_logging, bool verbose,
         PrintAndLogEx(SUCCESS, ">>>> %s", sprint_hex(encoded, encoded_len));
     }
 
-    uint8_t response[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     int resplen = 0;
     int res = ExchangeAPDU14a(encoded, encoded_len, false, true, response, sizeof(response), &resplen);
     if (res != PM3_SUCCESS) {

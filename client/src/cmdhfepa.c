@@ -156,7 +156,7 @@ static int CmdHFEPAPACEReplay(const char *Cmd) {
     PacketResponseNG resp;
 
     // transfer the APDUs to the Proxmark3
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     // fast push mode
     g_conn.block_after_ACK = true;
     for (int i = 0; i < ARRAYLEN(apdu_lengths); i++) {
@@ -179,7 +179,8 @@ static int CmdHFEPAPACEReplay(const char *Cmd) {
             clearCommandBuffer();
             // arg0: APDU number
             // arg1: offset into the APDU
-            uint8_t ubuf[sizeof(epa_replay_t) + sizeof(data)] = {0};
+            uint8_t ubuf[sizeof(epa_replay_t) + sizeof(data)];
+            memset(ubuf, 0, sizeof(ubuf));
             epa_replay_t *upayload = (epa_replay_t *)ubuf;
             upayload->apdu_num = i + 1;
             upayload->offset = j * sizeof(data);

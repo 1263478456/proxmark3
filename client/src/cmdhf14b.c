@@ -128,7 +128,8 @@ static void hf14b_aid_search(bool verbose) {
 
 
         // COMPUTE APDU
-        uint8_t apdu_data[PM3_CMD_DATA_SIZE] = {0};
+        uint8_t apdu_data[g_conn.pm3_cmd_data_size];
+        memset(apdu_data, 0, sizeof(apdu_data));
         int apdu_len = 0;
         sAPDU_t apdu = (sAPDU_t) {0x00, 0xa4, 0x04, 0x00, vaidlen, vaid};
 
@@ -476,9 +477,10 @@ static int print_atqb_resp(uint8_t *data, uint8_t cid) {
         PrintAndLogEx(INFO, "--- " _CYAN_("Fingerprint") " -------------------------------");
 
         int outlen = 0;
-        uint8_t out[PM3_CMD_DATA_SIZE] = {0};
+        uint8_t out[g_conn.pm3_cmd_data_size];
+        memset(out, 0, sizeof(out));
         uint8_t tcos_version[] = {0x90, 0xB2, 0x90, 0x00, 0x00};
-        if (exchange_14b_apdu(tcos_version, sizeof(tcos_version), true, false, out, PM3_CMD_DATA_SIZE, &outlen, -1) == PM3_SUCCESS) {
+        if (exchange_14b_apdu(tcos_version, sizeof(tcos_version), true, false, out, g_conn.pm3_cmd_data_size, &outlen, -1) == PM3_SUCCESS) {
             if (outlen > 2) {
                 PrintAndLogEx(SUCCESS, "Tiananxin TCOS CPU card... " _YELLOW_("%s"), sprint_ascii(out, outlen - 2));
             } else {
@@ -1191,7 +1193,8 @@ static int CmdHF14BRaw(const char *Cmd) {
     bool add_crc = arg_get_lit(ctx, 2);
     bool keep_field_on = arg_get_lit(ctx, 3);
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     int datalen = 0;
     CLIParamHexToBuf(arg_get_str(ctx, 4), data, sizeof(data), &datalen);
 
@@ -1268,8 +1271,8 @@ static int CmdHF14BRaw(const char *Cmd) {
         flags |= ISO14B_RAW;
     }
 
-    // Max buffer is PM3_CMD_DATA_SIZE
-    datalen = (datalen > PM3_CMD_DATA_SIZE) ? PM3_CMD_DATA_SIZE : datalen;
+    // Max buffer is g_conn.pm3_cmd_data_size
+    datalen = (datalen > g_conn.pm3_cmd_data_size) ? g_conn.pm3_cmd_data_size : datalen;
 
     iso14b_raw_cmd_t *packet = (iso14b_raw_cmd_t *)calloc(1, sizeof(iso14b_raw_cmd_t) + datalen);
     if (packet == NULL) {
@@ -2272,7 +2275,7 @@ static int CmdHF14BDump(const char *Cmd) {
         }
 
         uint16_t total = 0;
-        uint8_t resp_buf[PM3_CMD_DATA_SIZE];
+        uint8_t resp_buf[g_conn.pm3_cmd_data_size];
         int resplen = 0;
         // Field is off after get_14b_UID (ISO14B_DISCONNECT); track so we only
         // pay the WUPB+ATTRIB reconnect cost once across both phases.
@@ -2867,7 +2870,7 @@ static int handle_14b_apdu(bool chainingin, uint8_t *datain, int datainlen,
 
     // "Command APDU" length should be 5+255+1, but javacard's APDU buffer might be smaller - 133 bytes
     // https://stackoverflow.com/questions/32994936/safe-max-java-card-apdu-data-command-and-respond-size
-    // here length PM3_CMD_DATA_SIZE=512
+    // here length g_conn.pm3_cmd_data_size is always at least 512
     if (datain) {
         packet->rawlen = datainlen;
         memcpy(packet->raw, datain, datainlen);
@@ -2935,7 +2938,7 @@ int exchange_14b_apdu(uint8_t *datain, int datainlen, bool activate_field,
 
     // 3 byte here - 1b framing header, 2b crc16
     if (apdu_in_framing_enable &&
-            ((apdu_frame_length && (datainlen > apdu_frame_length - 3)) || (datainlen > PM3_CMD_DATA_SIZE - 3))) {
+            ((apdu_frame_length && (datainlen > apdu_frame_length - 3)) || (datainlen > g_conn.pm3_cmd_data_size - 3))) {
 
         int clen = 0;
         bool v_activate_field = activate_field;
@@ -3022,7 +3025,8 @@ int exchange_14b_prime_apdu(uint8_t *datain, int datainlen, bool activate_field,
         }
     }
 
-    uint8_t frame[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t frame[g_conn.pm3_cmd_data_size];
+    memset(frame, 0, sizeof(frame));
     const uint16_t frame_len = (uint16_t)datainlen + 3;
     if (frame_len > sizeof(frame)) {
         return PM3_EINVARG;
@@ -3146,7 +3150,8 @@ static int CmdHF14BAPDU(const char *Cmd) {
     bool decode_TLV = arg_get_lit(ctx, 3);
     bool decode_APDU = arg_get_lit(ctx, 4);
 
-    uint8_t header[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t header[g_conn.pm3_cmd_data_size];
+    memset(header, 0, sizeof(header));
     int headerlen = 0;
     CLIGetHexWithReturn(ctx, 5, header, &headerlen);
 
@@ -3160,11 +3165,13 @@ static int CmdHF14BAPDU(const char *Cmd) {
     bool extended_APDU = arg_get_lit(ctx, 6);
     int le = arg_get_int_def(ctx, 7, 0);
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     int datalen = 0;
 
     if (make_APDU) {
-        uint8_t apdudata[PM3_CMD_DATA_SIZE] = {0};
+        uint8_t apdudata[g_conn.pm3_cmd_data_size];
+        memset(apdudata, 0, sizeof(apdudata));
         int apdudatalen = 0;
 
         CLIGetHexBLessWithReturn(ctx, 8, apdudata, &apdudatalen, 1 + 2);
@@ -3220,7 +3227,7 @@ static int CmdHF14BAPDU(const char *Cmd) {
             PrintAndLogEx(WARNING, "can't decode APDU.");
     }
 
-    int res = exchange_14b_apdu(data, datalen, activate_field, leave_signal_on, data, PM3_CMD_DATA_SIZE, &datalen, user_timeout);
+    int res = exchange_14b_apdu(data, datalen, activate_field, leave_signal_on, data, g_conn.pm3_cmd_data_size, &datalen, user_timeout);
     if (res != PM3_SUCCESS) {
         return res;
     }
@@ -3273,7 +3280,7 @@ int CmdHF14BNdefRead(const char *Cmd) {
 
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     // ---------------  Select NDEF Tag application ----------------
@@ -3686,16 +3693,17 @@ static int CmdHF14BSetUID(const char *Cmd) {
     }
 
     int outlen = 0;
-    uint8_t out[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t out[g_conn.pm3_cmd_data_size];
+    memset(out, 0, sizeof(out));
     uint8_t tcos_version[] = {0x90, 0xB2, 0x90, 0x00, 0x00};
-    if (exchange_14b_apdu(tcos_version, sizeof(tcos_version), true, false, out, PM3_CMD_DATA_SIZE, &outlen, -1) != PM3_SUCCESS) {
+    if (exchange_14b_apdu(tcos_version, sizeof(tcos_version), true, false, out, g_conn.pm3_cmd_data_size, &outlen, -1) != PM3_SUCCESS) {
         PrintAndLogEx(FAILED, "None supported tag");
         return PM3_EFAILED;
     }
 
     uint8_t cmd[] = { 0x90, 0xF8, 0xEE, 0xEE, 0x0B, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     memcpy(cmd + 6, uid, uidlen);
-    if (exchange_14b_apdu(cmd, sizeof(cmd), true, false, out, PM3_CMD_DATA_SIZE, &outlen, -1) != PM3_SUCCESS) {
+    if (exchange_14b_apdu(cmd, sizeof(cmd), true, false, out, g_conn.pm3_cmd_data_size, &outlen, -1) != PM3_SUCCESS) {
         PrintAndLogEx(WARNING, "timeout while waiting for reply");
         return PM3_EFAILED;
     }

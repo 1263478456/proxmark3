@@ -139,9 +139,6 @@ typedef struct {
     uint8_t data[];
 } PACKED iso14a_raw_resp_t;
 
-#define ISO14A_RESP_LEN(x) (sizeof(iso14a_raw_resp_t) + (x))
-#define ISO14A_RESP_MAXLEN (PM3_CMD_DATA_SIZE - sizeof(iso14a_raw_resp_t))
-
 typedef struct {
     uint8_t *response;
     uint8_t *modulation;

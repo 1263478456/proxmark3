@@ -261,7 +261,8 @@ int hf14a_getversion_data(iso14a_card_select_t *card, uint64_t select_status, ve
         // GetVersion
         if ((select_status == 1) || (select_status == 4)) { // L4
 
-            uint8_t response[PM3_CMD_DATA_SIZE] = {0};
+            uint8_t response[g_conn.pm3_cmd_data_size];
+            memset(response, 0, sizeof(response));
             int resp_len = 0;
             uint8_t getVersion[5] = {0x90, 0x60, 0x00, 0x00, 0x00};
             res = ExchangeAPDU14a(getVersion, sizeof(getVersion), false, false, response, sizeof(response), &resp_len);
@@ -301,12 +302,13 @@ int hf14a_getversion_data(iso14a_card_select_t *card, uint64_t select_status, ve
 void SendIso14aReaderEx(uint32_t flags, const uint8_t *data, uint16_t datalen, uint16_t len,
                         uint16_t lenbits, uint32_t timeout, uint32_t wait_us) {
 
-    if (datalen > (PM3_CMD_DATA_SIZE - sizeof(iso14a_raw_cmd_t))) {
+    if (datalen > (g_conn.pm3_cmd_data_size - sizeof(iso14a_raw_cmd_t))) {
         PrintAndLogEx(WARNING, "Sending " _RED_("%u") " bytes of payload is too much, abort", datalen);
         return;
     }
 
-    uint8_t buf[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0, sizeof(buf));
     iso14a_raw_cmd_t *payload = (iso14a_raw_cmd_t *)buf;
     payload->flags = flags;
     payload->timeout = timeout;
@@ -1232,10 +1234,12 @@ int ExchangeRAW14a(uint8_t *datain, int datainlen, bool activateField, bool leav
         cmdc |= ISO14A_NO_DISCONNECT;
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = { 0x0a | gs_frames_num, 0x00 };
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
+    data[0] = 0x0a | gs_frames_num;
     gs_frames_num ^= 1;
 
-    int min = MIN((PM3_CMD_DATA_SIZE - 2), (datainlen & 0x1FF));
+    int min = MIN((g_conn.pm3_cmd_data_size - 2), (datainlen & 0x1FF));
     memcpy(&data[2], datain, min);
     SendIso14aReader(ISO14A_RAW | ISO14A_APPEND_CRC | cmdc, data, min + 2);
 
@@ -1457,7 +1461,7 @@ static int CmdExchangeAPDU(bool chainingin, const uint8_t *datain, int datainlen
 
     // "Command APDU" length should be 5+255+1, but javacard's APDU buffer might be smaller - 133 bytes
     // https://stackoverflow.com/questions/32994936/safe-max-java-card-apdu-data-command-and-respond-size
-    // here length PM3_CMD_DATA_SIZE=512
+    // here length g_conn.pm3_cmd_data_size=512
     // timeout must be authomatically set by "get ATS"
     if (datain) {
         SendIso14aReader(cmdc, datain, (datainlen & 0x1FF));
@@ -1541,7 +1545,7 @@ int ExchangeAPDU14a(const uint8_t *datain, int datainlen, bool activateField, bo
 
     // 3 byte here - 1b framing header, 2b crc16
     if (g_apdu_in_framing_enable &&
-            ((gs_frame_len && (datainlen > gs_frame_len - 3)) || (datainlen > PM3_CMD_DATA_SIZE - 3))) {
+            ((gs_frame_len && (datainlen > gs_frame_len - 3)) || (datainlen > g_conn.pm3_cmd_data_size - 3))) {
 
         int clen = 0;
 
@@ -1647,7 +1651,7 @@ static int CmdHF14AAPDU(const char *Cmd) {
     bool decodeTLV = arg_get_lit(ctx, 3);
     bool decodeAPDU = arg_get_lit(ctx, 4);
 
-    uint8_t header[PM3_CMD_DATA_SIZE];
+    uint8_t header[g_conn.pm3_cmd_data_size];
     int headerlen = 0;
     CLIGetHexWithReturn(ctx, 5, header, &headerlen);
 
@@ -1662,11 +1666,12 @@ static int CmdHF14AAPDU(const char *Cmd) {
     bool extendedAPDU = arg_get_lit(ctx, 6);
     int le = arg_get_int_def(ctx, 7, 0);
 
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     int datalen = 0;
 
     if (makeAPDU) {
-        uint8_t apdudata[PM3_CMD_DATA_SIZE] = {0};
+        uint8_t apdudata[g_conn.pm3_cmd_data_size];
+        memset(apdudata, 0, sizeof(apdudata));
         int apdudatalen = 0;
 
         CLIGetHexBLessWithReturn(ctx, 8, apdudata, &apdudatalen, 1 + 2);
@@ -1722,7 +1727,7 @@ static int CmdHF14AAPDU(const char *Cmd) {
             PrintAndLogEx(WARNING, "can't decode APDU.");
     }
 
-    int res = ExchangeAPDU14a(data, datalen, activateField, leaveSignalON, data, PM3_CMD_DATA_SIZE, &datalen);
+    int res = ExchangeAPDU14a(data, datalen, activateField, leaveSignalON, data, g_conn.pm3_cmd_data_size, &datalen);
     if (res != PM3_SUCCESS)
         return res;
 
@@ -1785,7 +1790,8 @@ static int CmdHF14ACmdRaw(const char *Cmd) {
     bool use_schann = arg_get_lit(ctx, 13);
 
     int datalen = 0;
-    uint8_t data[PM3_CMD_DATA_SIZE - sizeof(iso14a_raw_cmd_t)] = {0};
+    uint8_t data[g_conn.pm3_cmd_data_size - sizeof(iso14a_raw_cmd_t)];
+    memset(data, 0, sizeof(data));
     CLIGetHexWithReturn(ctx, 14, data, &datalen);
     CLIParserFree(ctx);
 
@@ -1872,7 +1878,8 @@ static int CmdHF14ACmdRaw(const char *Cmd) {
         datalen = sizeof(data);
     }
 
-    uint8_t buf[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0, sizeof(buf));
     iso14a_raw_cmd_t *payload = (iso14a_raw_cmd_t *)buf;
     payload->flags = flags;
     payload->timeout = timeout_etu;
@@ -3688,7 +3695,8 @@ static int CmdHf14AFindapdu(const char *Cmd) {
     uint8_t p1 = p1_arg[0];
     uint8_t p2 = p2_arg[0];
 
-    uint8_t response[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     int response_n = 0;
     uint8_t aSELECT_AID[80];
     int aSELECT_AID_n = 0;
@@ -3841,7 +3849,7 @@ int CmdHF14ANdefRead(const char *Cmd) {
 
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
     bool backward_compatibility_v1 = false;
 
@@ -4077,7 +4085,7 @@ int CmdHF14ANdefFormat(const char *Cmd) {
 
     bool activate_field = true;
     bool keep_field_on = false;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     SetAPDULogging(false);

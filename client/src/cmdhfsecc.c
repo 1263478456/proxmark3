@@ -18,7 +18,7 @@
 // ---------------------------------------------------------------------------
 
 // Must stay in sync with armsrc/secc.h. Sized so hid_sim_payload_t fits in
-// PM3_CMD_DATA_SIZE (512); adjust ENTRIES carefully if any field is added.
+// ; adjust ENTRIES carefully if any field is added.
 #define HID_APDU_MAX_ENTRIES 7
 #define HID_APDU_MAX_CMD     20
 #define HID_APDU_MAX_RESP    32
@@ -49,10 +49,6 @@ typedef struct {
     uint8_t  apdu_count;
     hid_apdu_entry_t apdu_table[HID_APDU_MAX_ENTRIES];
 } PACKED hid_sim_payload_t;
-
-// Hard guard: SendCommandNG silently drops any payload over PM3_CMD_DATA_SIZE.
-_Static_assert(sizeof(hid_sim_payload_t) <= PM3_CMD_DATA_SIZE,
-               "hid_sim_payload_t exceeds PM3_CMD_DATA_SIZE; shrink HID_APDU_MAX_ENTRIES or HID_APDU_MAX_RESP");
 
 // Must stay in sync with hid_sniff_payload_t in armsrc/secc.h.
 #define HID_JAM_MAX_APDU  32

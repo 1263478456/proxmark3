@@ -157,8 +157,10 @@ static int info_hf_tesla(bool parse_certs) {
     for (uint8_t i = 0; i < 5; i++) {
 
         // First, read the certificate length
-        uint8_t aSELECT_CERT[PM3_CMD_DATA_SIZE] = {0x80, 0x06, i, 0x00, 0x04};
-        int aSELECT_CERT_n = 5;
+        uint8_t aSELECT_CERT[g_conn.pm3_cmd_data_size];
+        uint8_t aSELECT_CERT_init[] = {0x80, 0x06, i, 0x00, 0x04};
+        memcpy(aSELECT_CERT, aSELECT_CERT_init, sizeof(aSELECT_CERT_init));
+        int aSELECT_CERT_n = sizeof(aSELECT_CERT_init);
 
         res = ExchangeAPDU14a(aSELECT_CERT, aSELECT_CERT_n, activate_field, keep_field_on, response, sizeof(response), &resplen);
         if (res != PM3_SUCCESS) {

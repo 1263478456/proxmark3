@@ -325,7 +325,7 @@ static void itc_encode_card_blob(uint8_t facility_code, uint16_t card_number, ui
 static int ict_select(void) {
     bool activate_field = true;
     bool keep_field_on = true;
-    uint8_t response[PM3_CMD_DATA_SIZE];
+    uint8_t response[g_conn.pm3_cmd_data_size];
     int resplen = 0;
 
     // ---------------  Select SEOS applet ----------------

@@ -293,7 +293,7 @@ static int print_and_validate_version(flash_file_t *ctx) {
     }
 
     // same limit as for ARM image
-    char temp[PM3_CMD_DATA_SIZE - 12] = {0};
+    char temp[PM3_CMD_DATA_SIZE_OLD - 12] = {0};
     FormatVersionInformation(temp, sizeof(temp), "", ctx->ver_info);
     PrintAndLogEx(SUCCESS, _CYAN_("ELF file version") _YELLOW_(" %s"), temp);
 

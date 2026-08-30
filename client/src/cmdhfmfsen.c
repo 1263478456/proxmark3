@@ -772,7 +772,8 @@ static int fm11_collect_nonces_from_default_key_fallback(const fm11_keylist_t *d
             break;
         }
 
-        uint8_t key_block[KEYBLOCK_SIZE] = {0};
+        uint8_t key_block[KEYBLOCK_SIZE];
+        memset(key_block, 0, sizeof(key_block));
         uint8_t chunk = MIN(KEYS_IN_BLOCK, defaults->count - idx);
         for (uint8_t i = 0; i < chunk; i++) {
             num_to_bytes(defaults->data[idx + i].key, MIFARE_KEY_SIZE, key_block + (i * MIFARE_KEY_SIZE));
@@ -2109,7 +2110,8 @@ static int fm11_verify_global_priority_keys(const fm11_keylist_t *priority,
                 goto out;
             }
 
-            uint8_t key_block[KEYBLOCK_SIZE] = {0};
+            uint8_t key_block[KEYBLOCK_SIZE];
+            memset(key_block, 0, sizeof(key_block));
             uint8_t chunk = MIN(KEYS_IN_BLOCK, priority->count - idx);
             bool last_chunk = (idx + chunk) >= priority->count;
             for (uint8_t i = 0; i < chunk; i++) {
@@ -2306,7 +2308,8 @@ static int fm11_check_default_keys(uint32_t uid,
                 goto normal_out;
             }
 
-            uint8_t key_block[KEYBLOCK_SIZE] = {0};
+            uint8_t key_block[KEYBLOCK_SIZE];
+            memset(key_block, 0, sizeof(key_block));
             uint8_t chunk = MIN(KEYS_IN_BLOCK, matches.count - idx);
             bool last_chunk = (idx + chunk) >= matches.count;
             for (uint8_t i = 0; i < chunk; i++) {
@@ -2352,7 +2355,8 @@ normal_out:
                 retval = PM3_EOPABORTED;
                 break;
             }
-            uint8_t key_block[KEYBLOCK_SIZE] = {0};
+            uint8_t key_block[KEYBLOCK_SIZE];
+            memset(key_block, 0, sizeof(key_block));
             uint8_t chunk = MIN(KEYS_IN_BLOCK, matches.count - idx);
             for (uint8_t i = 0; i < chunk; i++) {
                 num_to_bytes(matches.data[idx + i].key, MIFARE_KEY_SIZE, key_block + (i * MIFARE_KEY_SIZE));
@@ -2413,7 +2417,8 @@ static uint32_t fm11_propagate_key_reuse_online(uint32_t nonce_count, uint64_t k
     }
 
     key &= 0xFFFFFFFFFFFFULL;
-    uint8_t key_block[KEYBLOCK_SIZE] = {0};
+    uint8_t key_block[KEYBLOCK_SIZE];
+    memset(key_block, 0, sizeof(key_block));
     num_to_bytes(key, MIFARE_KEY_SIZE, key_block);
     uint32_t newly_found = 0;
 
@@ -2614,7 +2619,8 @@ static int fm11_verify_candidates(uint8_t real_sec, uint8_t key_type, const fm11
         if (kbd_enter_pressed()) {
             return PM3_EOPABORTED;
         }
-        uint8_t key_block[KEYBLOCK_SIZE] = {0};
+        uint8_t key_block[KEYBLOCK_SIZE];
+        memset(key_block, 0, sizeof(key_block));
         uint8_t chunk = MIN(KEYS_IN_BLOCK, list->count - idx);
         for (uint8_t i = 0; i < chunk; i++) {
             num_to_bytes(list->data[idx + i].key, MIFARE_KEY_SIZE, key_block + (i * MIFARE_KEY_SIZE));

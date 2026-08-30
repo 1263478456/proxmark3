@@ -66,7 +66,7 @@ static int usart_txrx(uint8_t *srcdata, size_t srclen, uint8_t *dstdata, size_t 
     } PACKED;
     struct {
         struct payload_header header;
-        uint8_t data[PM3_CMD_DATA_SIZE - sizeof(uint32_t)];
+        uint8_t data[g_conn.pm3_cmd_data_size - sizeof(uint32_t)];
     } PACKED payload;
 
     payload.header.waittime = waittime;
@@ -158,7 +158,8 @@ static int usart_bt_testcomm(uint32_t baudrate, uint8_t parity) {
         return ret;
 
     const char *string = "AT+VERSION";
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     size_t len = 0;
 
     PrintAndLogEx(SUCCESS, "TX (%3zu):%.*s at %u 8%c1", strlen(string), (int)strlen(string), string, baudrate, parity);
@@ -261,7 +262,7 @@ static int CmdUsartBtFactory(const char *Cmd) {
 
     PrintAndLogEx(INFO, "Reconfiguring add-on to default settings.");
     const char *string;
-    uint8_t data[PM3_CMD_DATA_SIZE];
+    uint8_t data[g_conn.pm3_cmd_data_size];
     size_t len = 0;
     memset(data, 0, sizeof(data));
 
@@ -450,7 +451,8 @@ static int CmdUsartBtPin(const char *Cmd) {
 
     char string[6 + sizeof(pin)] = {0};
     snprintf(string, sizeof(string), "AT+PIN%s", pin);
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     size_t len = 0;
     int ret = usart_txrx((uint8_t *)string, strlen(string), data, &len, 600);
 
@@ -488,11 +490,13 @@ static int CmdUsartTX(const char *Cmd) {
     };
     CLIExecWithReturn(ctx, Cmd, argtable, true);
     int slen = 0;
-    char s[PM3_CMD_DATA_SIZE] = {0};
+    char s[g_conn.pm3_cmd_data_size];
+    memset(s, 0, sizeof(s));
     CLIParamStrToBuf(arg_get_str(ctx, 1), (uint8_t *)s, sizeof(s), &slen);
     CLIParserFree(ctx);
 
-    char clean[PM3_CMD_DATA_SIZE] = {0};
+    char clean[g_conn.pm3_cmd_data_size];
+    memset(clean, 0, sizeof(clean));
     size_t i2 = 0;
     size_t n = strlen(s);
 
@@ -543,7 +547,8 @@ static int CmdUsartRX(const char *Cmd) {
     uint32_t waittime = arg_get_u32_def(ctx, 1, 0);
     CLIParserFree(ctx);
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     size_t len = 0;
     int ret = usart_rx(data, &len, waittime);
     if (ret != PM3_SUCCESS)
@@ -574,11 +579,13 @@ static int CmdUsartTXRX(const char *Cmd) {
     CLIExecWithReturn(ctx, Cmd, argtable, true);
     uint32_t waittime = arg_get_u32_def(ctx, 1, 1000);
     int slen = 0;
-    char s[PM3_CMD_DATA_SIZE] = {0};
+    char s[g_conn.pm3_cmd_data_size];
+    memset(s, 0, sizeof(s));
     CLIParamStrToBuf(arg_get_str(ctx, 2), (uint8_t *)s, sizeof(s), &slen);
     CLIParserFree(ctx);
 
-    char clean[PM3_CMD_DATA_SIZE] = {0};
+    char clean[g_conn.pm3_cmd_data_size];
+    memset(clean, 0, sizeof(clean));
     size_t j = 0;
     size_t n = strlen(s);
     for (size_t i = 0; i < n; i++) {
@@ -608,7 +615,8 @@ static int CmdUsartTXRX(const char *Cmd) {
         clean[j++] = s[i];
     }
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     size_t len = 0;
     PrintAndLogEx(SUCCESS, "TX (%3zu):%.*s", strlen(clean), (int)strlen(clean), clean);
     int ret = usart_txrx((uint8_t *)clean, strlen(clean), data, &len, waittime);
@@ -636,7 +644,8 @@ static int CmdUsartTXhex(const char *Cmd) {
     CLIExecWithReturn(ctx, Cmd, argtable, true);
 
     int dlen = 0;
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     int res = CLIParamHexToBuf(arg_get_str(ctx, 1), data, sizeof(data), &dlen);
     CLIParserFree(ctx);
 
@@ -665,7 +674,8 @@ static int CmdUsartRXhex(const char *Cmd) {
     uint32_t waittime = arg_get_u32_def(ctx, 1, 0);
     CLIParserFree(ctx);
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0x00};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     size_t len = 0;
     int ret = usart_rx(data, &len, waittime);
     if (ret != PM3_SUCCESS)

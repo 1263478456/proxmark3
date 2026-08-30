@@ -84,7 +84,7 @@ static size_t nbytes(size_t nbits) {
 static int CmdLFHitagList(const char *Cmd) {
     return CmdTraceListAlias(Cmd, "lf hitag", "ht2");
     /*
-    uint8_t *got = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    uint8_t *got = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (got == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         return PM3_EMALLOC;
@@ -92,14 +92,14 @@ static int CmdLFHitagList(const char *Cmd) {
 
     // Query for the actual size of the trace
     PacketResponseNG resp;
-    if (!GetFromDevice(BIG_BUF, got, PM3_CMD_DATA_SIZE, 0, NULL, 0, &resp, 2500, false)) {
+    if (!GetFromDevice(BIG_BUF, got, g_conn.pm3_cmd_data_size, 0, NULL, 0, &resp, 2500, false)) {
         PrintAndLogEx(WARNING, "command execution time out");
         free(got);
         return PM3_ETIMEOUT;
     }
 
     uint16_t traceLen = resp.arg[2];
-    if (traceLen > PM3_CMD_DATA_SIZE) {
+    if (traceLen > g_conn.pm3_cmd_data_size) {
         uint8_t *p = realloc(got, traceLen);
         if (p == NULL) {
             PrintAndLogEx(WARNING, "Failed to allocate memory");

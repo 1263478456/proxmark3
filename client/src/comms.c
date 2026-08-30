@@ -46,15 +46,6 @@ capabilities_t g_pm3_capabilities;
 // Fall back to the OLD size 512,
 // Note a pre-v9 device does not reach this branch, TestProxmark() fills the field in for it.
 //
-// Capped by PM3_CMD_DATA_SIZE as well, since that is what sizes our own buffers.
-uint16_t pm3_max_cmd_data_size(void) {
-
-    uint16_t devmax = g_pm3_capabilities.max_cmd_data_size;
-    if (devmax == 0) {
-        devmax = CAPABILITIES_LEGACY_CMD_DATA_SIZE;
-    }
-    return MIN(devmax, (uint16_t)PM3_CMD_DATA_SIZE);
-}
 
 static pthread_t communication_thread;
 static pthread_t reconnect_thread;
@@ -194,9 +185,8 @@ void SendCommandNG(uint16_t cmd, uint8_t *data, size_t len) {
         PrintAndLogEx(INFO, "Sending bytes to proxmark failed - offline");
         return;
     }
-    uint16_t maxlen = pm3_max_cmd_data_size();
-    if (len > maxlen) {
-        PrintAndLogEx(WARNING, "Sending " _RED_("%zu") " bytes of payload is too much for this device (max " _YELLOW_("%u") "), abort", len, maxlen);
+    if (len > g_conn.pm3_cmd_data_size) {
+        PrintAndLogEx(WARNING, "Sending " _RED_("%zu") " bytes of payload is too much for this device (max " _YELLOW_("%u") "), abort", len, g_conn.pm3_cmd_data_size);
         return;
     }
 
@@ -324,7 +314,7 @@ static void PacketResponseReceived(PacketResponseNG *packet) {
         // First check if we are handling a debug message
         case CMD_DEBUG_PRINT_STRING: {
 
-            char s[PM3_CMD_DATA_SIZE + 1];
+            char s[g_conn.pm3_cmd_data_size + 1];
             memset(s, 0x00, sizeof(s));
 
             size_t len;
@@ -332,14 +322,14 @@ static void PacketResponseReceived(PacketResponseNG *packet) {
             if (packet->ng) {
                 struct d {
                     uint16_t flag;
-                    uint8_t buf[PM3_CMD_DATA_SIZE - sizeof(uint16_t)];
+                    uint8_t buf[g_conn.pm3_cmd_data_size - sizeof(uint16_t)];
                 } PACKED;
                 const struct d *data = (struct d *)&packet->data.asBytes;
                 len = packet->length - sizeof(data->flag);
                 flag = data->flag;
                 memcpy(s, data->buf, len);
             } else {
-                len = MIN(packet->oldarg[0], PM3_CMD_DATA_SIZE);
+                len = MIN(packet->oldarg[0], g_conn.pm3_cmd_data_size);
                 flag = packet->oldarg[1];
                 memcpy(s, packet->data.asBytes, len);
             }
@@ -523,7 +513,7 @@ __attribute__((force_align_arg_pointer))
 
                 if (rx.magic == RESPONSENG_PREAMBLE_MAGIC) { // New style NG reply
 
-                    if (length > PM3_CMD_DATA_SIZE) {
+                    if (length > g_conn.pm3_cmd_data_size) {
                         PrintAndLogEx(WARNING, "Received packet frame with incompatible length: 0x%04x", length);
                         error = true;
                     }
@@ -905,7 +895,7 @@ int TestProxmark(pm3_device_t *dev) {
     for (uint16_t i = 0; i < len; i++) {
         data[i] = i & 0xFF;
     }
-
+    g_conn.pm3_cmd_data_size = PM3_CMD_DATA_SIZE_OLD; // reset to default, as we don't know yet the device capabilities
     __atomic_store_n(&last_packet_time,  msclock(), __ATOMIC_SEQ_CST);
     clearCommandBuffer();
     SendCommandNG(CMD_PING, data, len);
@@ -948,6 +938,7 @@ int TestProxmark(pm3_device_t *dev) {
 
     g_conn.send_via_fpc_usart = g_pm3_capabilities.via_fpc;
     g_conn.uart_speed = g_pm3_capabilities.baudrate;
+    g_conn.pm3_cmd_data_size = g_pm3_capabilities.max_cmd_data_size;
 
     bool is_tcp_conn = (g_conn.send_via_ip == PM3_TCPv4 || g_conn.send_via_ip == PM3_TCPv6);
     bool is_bt_conn = (memcmp(g_conn.serial_port_name, "bt:", 3) == 0);
@@ -960,7 +951,7 @@ int TestProxmark(pm3_device_t *dev) {
                   (is_udp_conn) ? " over " _GREEN_("UDP") : ""
                  );
     PrintAndLogEx(SUCCESS, "Max frame size: " _GREEN_("%u") " bytes",
-                  g_pm3_capabilities.max_cmd_data_size);
+                  g_conn.pm3_cmd_data_size);
     if (g_conn.send_via_fpc_usart) {
         PrintAndLogEx(SUCCESS, "PM3 UART serial baudrate: " _GREEN_("%u") "\n", g_conn.uart_speed);
     } else {
@@ -1232,7 +1223,8 @@ bool GetFromDevice(DeviceMemType_t memtype, uint8_t *dest, uint32_t bytes, uint3
             return dl_it(dest, bytes, response, ms_timeout, show_warning, CMD_DOWNLOADED_EML_BIGBUF, CMD_DOWNLOAD_EML_BIGBUF);
         }
         case SPIFFS: {
-            uint8_t sbuf[PM3_CMD_DATA_SIZE] = {0};
+            uint8_t sbuf[g_conn.pm3_cmd_data_size];
+            memset(sbuf, 0, sizeof(sbuf));
             download_req_t *sreq = (download_req_t *)sbuf;
             sreq->start_index = start_index;
             sreq->bytes = bytes;
@@ -1318,9 +1310,9 @@ static bool dl_it(uint8_t *dest, uint32_t bytes, PacketResponseNG *response, siz
 
                 copy_bytes = MIN(bytes - bytes_completed, copy_bytes);
 
-                // extended bounds check1.  upper limit is PM3_CMD_DATA_SIZE
+                // extended bounds check1.  upper limit is g_conn.pm3_cmd_data_size
                 // shouldn't happen
-                copy_bytes = MIN(copy_bytes, PM3_CMD_DATA_SIZE);
+                copy_bytes = MIN(copy_bytes, g_conn.pm3_cmd_data_size);
 
                 // extended bounds check2.
                 if (offset + copy_bytes > bytes) {

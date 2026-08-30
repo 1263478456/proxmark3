@@ -595,7 +595,7 @@ static int PivGetData(Iso7816CommandChannel channel, const uint8_t tag[], size_t
     };
 
     // Answer can be chained. Let's use a dynamically allocated buffer.
-    size_t capacity = PM3_CMD_DATA_SIZE;
+    size_t capacity = g_conn.pm3_cmd_data_size;
     struct tlvdb_root *root = calloc(1, sizeof(*root) + capacity);
     if (root == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
@@ -625,9 +625,9 @@ static int PivGetData(Iso7816CommandChannel channel, const uint8_t tag[], size_t
             apdu.P2 = 0x00;
             apdu.Lc = 0;
             apdu.data = NULL;
-            if ((capacity - root->len) < PM3_CMD_DATA_SIZE) {
+            if ((capacity - root->len) < g_conn.pm3_cmd_data_size) {
                 PrintAndLogEx(DEBUG, "Adding more capacity to buffer...");
-                capacity += PM3_CMD_DATA_SIZE;
+                capacity += g_conn.pm3_cmd_data_size;
                 struct tlvdb_root *new_root = realloc(root, sizeof(*root) + capacity);
                 if (new_root == NULL) {
                     PrintAndLogEx(WARNING, "Failed to allocate memory");

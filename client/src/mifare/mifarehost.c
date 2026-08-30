@@ -177,7 +177,7 @@ int mf_dark_side(uint8_t blockno, uint8_t key_type, uint64_t *key) {
         PrintAndLogEx(SUCCESS, "found " _YELLOW_("%u") " candidate key%s", keycount, (keycount > 1) ? "s" : "");
 
         *key = UINT64_C(-1);
-        uint8_t keyBlock[PM3_CMD_DATA_SIZE];
+        uint8_t keyBlock[g_conn.pm3_cmd_data_size];
         uint32_t max_keys = KEYS_IN_BLOCK;
         for (uint32_t i = 0; i < keycount; i += max_keys) {
 
@@ -217,7 +217,8 @@ int mf_check_keys(uint8_t blockNo, uint8_t keyType, bool clear_trace, uint8_t ke
     }
 
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
     data[0] = keyType;
     data[1] = blockNo;
     data[2] = clear_trace;
@@ -266,7 +267,8 @@ int mf_check_keys_fast_ex(uint8_t sectorsCnt, uint8_t firstChunk, uint8_t lastCh
         return PM3_EOUTOFBOUND;
     }
 
-    uint8_t buf[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0, sizeof(buf));
     mf_chkkeys_fast_t *payload = (mf_chkkeys_fast_t *)buf;
     payload->sectorcnt = sectorsCnt;
     payload->first_chunk = firstChunk;
@@ -472,7 +474,7 @@ int mf_key_brute(uint8_t blockNo, uint8_t keyType, const uint8_t *key, uint64_t 
     uint64_t key64;
     uint8_t found = false;
     uint8_t candidates[CANDIDATE_SIZE] = {0x00};
-    uint8_t keyBlock[KEYBLOCK_SIZE] = {0x00};
+    uint8_t keyBlock[KEYBLOCK_SIZE];
 
     memset(candidates, 0, sizeof(candidates));
     memset(keyBlock, 0, sizeof(keyBlock));
@@ -676,53 +678,55 @@ int mf_nested(uint8_t blockNo, uint8_t keyType, uint8_t *key, uint8_t trgBlockNo
     memset(resultKey, 0, MIFARE_KEY_SIZE);
     uint64_t key64 = -1;
 
-    // The list may still contain several key candidates. Test each of them with mfCheckKeys
-    uint32_t max_keys = keycnt > KEYS_IN_BLOCK ? KEYS_IN_BLOCK : keycnt;
-    uint8_t keyBlock[PM3_CMD_DATA_SIZE] = {0x00};
+    { // Need separate context for variable size buffer
+        // The list may still contain several key candidates. Test each of them with mfCheckKeys
+        uint32_t max_keys = keycnt > KEYS_IN_BLOCK ? KEYS_IN_BLOCK : keycnt;
+        uint8_t keyBlock[g_conn.pm3_cmd_data_size];
+        memset(keyBlock, 0, sizeof(keyBlock));
 
-    for (uint32_t i = 0; i < keycnt; i += max_keys) {
+        for (uint32_t i = 0; i < keycnt; i += max_keys) {
 
-        uint64_t start_time = msclock();
+            uint64_t start_time = msclock();
 
-        uint8_t size = keycnt - i > max_keys ? max_keys : keycnt - i;
+            uint8_t size = keycnt - i > max_keys ? max_keys : keycnt - i;
 
-        register uint8_t j;
-        for (j = 0; j < size; j++) {
-            crypto1_get_lfsr(statelists[0].head.slhead + i, &key64);
-            num_to_bytes(key64, MIFARE_KEY_SIZE, keyBlock + j * MIFARE_KEY_SIZE);
-        }
-
-        if (mf_check_keys(statelists[0].blockNo, statelists[0].keyType, false, size, keyBlock, &key64) == PM3_SUCCESS) {
-
-            if (looped) {
-                PrintAndLogEx(NORMAL, "");
+            register uint8_t j;
+            for (j = 0; j < size; j++) {
+                crypto1_get_lfsr(statelists[0].head.slhead + i, &key64);
+                num_to_bytes(key64, MIFARE_KEY_SIZE, keyBlock + j * MIFARE_KEY_SIZE);
             }
 
-            free(statelists[0].head.slhead);
-            free(statelists[1].head.slhead);
-            num_to_bytes(key64, MIFARE_KEY_SIZE, resultKey);
+            if (mf_check_keys(statelists[0].blockNo, statelists[0].keyType, false, size, keyBlock, &key64) == PM3_SUCCESS) {
 
-            if (package->keytype < 2) {
-                PrintAndLogEx(SUCCESS, "Target block " _GREEN_("%4u") " key type " _GREEN_("%c") " -- found valid key [ " _GREEN_("%s") " ]",
-                              package->block,
-                              package->keytype ? 'B' : 'A',
-                              sprint_hex_inrow(resultKey, MIFARE_KEY_SIZE)
-                             );
-            } else {
-                PrintAndLogEx(SUCCESS, "Target block " _GREEN_("%4u") " key type " _GREEN_("%02x") " -- found valid key [ " _GREEN_("%s") " ]",
-                              package->block,
-                              MIFARE_AUTH_KEYA + package->keytype,
-                              sprint_hex_inrow(resultKey, MIFARE_KEY_SIZE)
-                             );
+                if (looped) {
+                    PrintAndLogEx(NORMAL, "");
+                }
+
+                free(statelists[0].head.slhead);
+                free(statelists[1].head.slhead);
+                num_to_bytes(key64, MIFARE_KEY_SIZE, resultKey);
+
+                if (package->keytype < 2) {
+                    PrintAndLogEx(SUCCESS, "Target block " _GREEN_("%4u") " key type " _GREEN_("%c") " -- found valid key [ " _GREEN_("%s") " ]",
+                                package->block,
+                                package->keytype ? 'B' : 'A',
+                                sprint_hex_inrow(resultKey, MIFARE_KEY_SIZE)
+                                );
+                } else {
+                    PrintAndLogEx(SUCCESS, "Target block " _GREEN_("%4u") " key type " _GREEN_("%02x") " -- found valid key [ " _GREEN_("%s") " ]",
+                                package->block,
+                                MIFARE_AUTH_KEYA + package->keytype,
+                                sprint_hex_inrow(resultKey, MIFARE_KEY_SIZE)
+                                );
+                }
+                return PM3_SUCCESS;
             }
-            return PM3_SUCCESS;
-        }
 
-        float bruteforce_per_second = (float)(i + max_keys) / ((msclock() - start_time) / 1000.0);
-        PrintAndLogEx(INPLACE, "%6d/%u keys | %5.1f keys/sec | worst case %6.1f seconds remaining", i, keycnt, bruteforce_per_second, (keycnt - i) / bruteforce_per_second);
-        looped = true;
+            float bruteforce_per_second = (float)(i + max_keys) / ((msclock() - start_time) / 1000.0);
+            PrintAndLogEx(INPLACE, "%6d/%u keys | %5.1f keys/sec | worst case %6.1f seconds remaining", i, keycnt, bruteforce_per_second, (keycnt - i) / bruteforce_per_second);
+            looped = true;
+        }
     }
-
 out:
 
     if (looped) {
@@ -1091,7 +1095,7 @@ int mf_eml_get_mem(uint8_t *data, int blockNum, int blocksCount) {
 int mf_eml_get_mem_xt(uint8_t *data, int blockNum, int blocksCount, int blockBtWidth) {
 
     size_t size = ((size_t) blocksCount) * blockBtWidth;
-    if (size > PM3_CMD_DATA_SIZE) {
+    if (size > g_conn.pm3_cmd_data_size) {
         return PM3_ESOFT;
     }
 
@@ -1135,7 +1139,7 @@ int mf_eml_set_mem_xt(uint8_t *data, int blockNum, int blocksCount, int blockBtW
     } PACKED;
 
     size_t size = ((size_t) blocksCount) * blockBtWidth;
-    if (size > (PM3_CMD_DATA_SIZE - sizeof(struct p))) {
+    if (size > (g_conn.pm3_cmd_data_size - sizeof(struct p))) {
         return PM3_EINVARG;
     }
 
@@ -1280,7 +1284,8 @@ int mf_chinese_wipe(uint8_t *uid, const uint8_t *atqa, const uint8_t *sak, uint8
 
 int mf_chinese_set_block(uint8_t blockNo, uint8_t *data, uint8_t *uid, uint8_t params) {
 
-    uint8_t buf[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0, sizeof(buf));
     mf_chinese_blk_t *payload = (mf_chinese_blk_t *)buf;
     payload->params = params;
     payload->blockno = blockNo;
@@ -1338,7 +1343,8 @@ int mf_chinese_get_block(uint8_t blockNo, uint8_t *data, uint8_t params) {
 }
 
 int mf_chinese_gen_3_uid(uint8_t *uid, uint8_t uidlen, uint8_t *oldUid) {
-    uint8_t buf[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0, sizeof(buf));
     mf_gen3uid_t *payload = (mf_gen3uid_t *)buf;
     payload->uidlen = uidlen;
     memcpy(payload->uid, uid, uidlen);
@@ -1358,7 +1364,8 @@ int mf_chinese_gen_3_uid(uint8_t *uid, uint8_t uidlen, uint8_t *oldUid) {
 }
 
 int mf_chinese_gen_3_block(uint8_t *block, int blockLen, uint8_t *newBlock) {
-    uint8_t buf[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0, sizeof(buf));
     mf_gen3blk_t *payload = (mf_gen3blk_t *)buf;
     payload->blocklen = blockLen;
     memcpy(payload->block, block, MFBLOCK_SIZE);

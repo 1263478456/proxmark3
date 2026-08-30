@@ -106,7 +106,8 @@ static int l_fast_push_mode(lua_State *L) {
  */
 static int l_SendCommandNG(lua_State *L) {
 
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0x00, sizeof(data));
     size_t len = 0, size;
 
     // check number of arguments
@@ -426,7 +427,8 @@ static int l_CmdConsole(lua_State *L) {
 
 static int l_iso15693_crc(lua_State *L) {
     uint32_t tmp;
-    unsigned char buf[PM3_CMD_DATA_SIZE] = {0x00};
+    unsigned char buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0x00, sizeof(buf));
     size_t size = 0;
     const char *data = luaL_checklstring(L, 1, &size);
 
@@ -443,7 +445,8 @@ static int l_iso15693_crc(lua_State *L) {
 
 static int l_iso14443b_crc(lua_State *L) {
     uint32_t tmp;
-    unsigned char buf[PM3_CMD_DATA_SIZE] = {0x00};
+    unsigned char buf[g_conn.pm3_cmd_data_size];
+    memset(buf, 0x00, sizeof(buf));
     size_t size = 0;
     const char *data = luaL_checklstring(L, 1, &size);
 

@@ -1139,7 +1139,7 @@ static int download_trace(void) {
 
     gs_traceLen = 0;
 
-    gs_trace = calloc(PM3_CMD_DATA_SIZE, sizeof(uint8_t));
+    gs_trace = calloc(g_conn.pm3_cmd_data_size, sizeof(uint8_t));
     if (gs_trace == NULL) {
         PrintAndLogEx(WARNING, "Failed to allocate memory");
         return PM3_EMALLOC;
@@ -1147,9 +1147,9 @@ static int download_trace(void) {
 
     PrintAndLogEx(DEBUG, "downloading tracelog data from device");
 
-    // Query for the size of the trace,  downloading PM3_CMD_DATA_SIZE
+    // Query for the size of the trace,  downloading g_conn.pm3_cmd_data_size
     PacketResponseNG resp;
-    if (!GetFromDevice(BIG_BUF, gs_trace, PM3_CMD_DATA_SIZE, 0, NULL, 0, &resp, 4000, true)) {
+    if (!GetFromDevice(BIG_BUF, gs_trace, g_conn.pm3_cmd_data_size, 0, NULL, 0, &resp, 4000, true)) {
         PrintAndLogEx(WARNING, "timeout while waiting for reply");
         free(gs_trace);
         gs_trace = NULL;
@@ -1166,7 +1166,7 @@ static int download_trace(void) {
     gs_traceLen = ((const download_done_t *)resp.data.asBytes)->extra;
 
     // if tracelog buffer was larger and we need to download more.
-    if (gs_traceLen > PM3_CMD_DATA_SIZE) {
+    if (gs_traceLen > g_conn.pm3_cmd_data_size) {
 
         free(gs_trace);
         gs_trace = calloc(gs_traceLen, sizeof(uint8_t));

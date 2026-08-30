@@ -218,7 +218,8 @@ static bool emrtd_exchange_commands(sAPDU_t apdu, bool include_le, uint16_t le, 
 }
 
 static int emrtd_exchange_commands_noout(sAPDU_t apdu, bool activate_field, bool keep_field_on) {
-    uint8_t response[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     size_t resplen = 0;
     return emrtd_exchange_commands(apdu, false, 0, response, 0, &resplen, activate_field, keep_field_on);
 }
@@ -965,7 +966,8 @@ static bool emrtd_exchange_commands_sw(sAPDU_t apdu, bool include_le, uint16_t l
 }
 
 static bool emrtd_secure_select(emrtd_session_t *ssn, uint8_t p1, const uint8_t *sel, size_t sellen) {
-    uint8_t response[PM3_CMD_DATA_SIZE] = { 0x00 };
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     size_t resplen = 0;
 
     size_t blocksize = emrtd_sm_blocksize(ssn);
@@ -1112,7 +1114,8 @@ static bool emrtd_general_authenticate(const char *step, bool more, uint8_t inne
 
     PrintAndLogEx(DEBUG, "GA >>............. %s", sprint_hex_inrow(data, datalen));
 
-    uint8_t response[PM3_CMD_DATA_SIZE] = { 0x00 };
+    uint8_t response[g_conn.pm3_cmd_data_size];
+    memset(response, 0, sizeof(response));
     size_t resplen = 0;
     uint16_t sw = 0;
 
@@ -1161,7 +1164,8 @@ static bool emrtd_general_authenticate(const char *step, bool more, uint8_t inne
 static bool emrtd_general_authenticate_one(const char *step, bool more, uint8_t inner_tag,
                                            const uint8_t *payload, size_t payloadlen,
                                            uint8_t expect_tag, uint8_t *out, size_t maxout, size_t *outlen) {
-    uint8_t dyn[PM3_CMD_DATA_SIZE] = { 0x00 };
+    uint8_t dyn[g_conn.pm3_cmd_data_size];
+    memset(dyn, 0, sizeof(dyn));
     size_t dynlen = 0;
 
     if (emrtd_general_authenticate(step, more, inner_tag, payload, payloadlen, dyn, sizeof(dyn), &dynlen) == false) {
@@ -1298,7 +1302,8 @@ static int emrtd_do_pace(const emrtd_paceinfo_t *info, const uint8_t *password, 
         return PM3_ESOFT;
     }
 
-    uint8_t dyn[PM3_CMD_DATA_SIZE] = { 0x00 };
+    uint8_t dyn[g_conn.pm3_cmd_data_size];
+    memset(dyn, 0, sizeof(dyn));
     size_t dynlen = 0;
     if (emrtd_general_authenticate("step 4 (mutual authentication)", false, 0x85, t_ifd, sizeof(t_ifd), dyn, sizeof(dyn), &dynlen) == false) {
         return PM3_ESOFT;

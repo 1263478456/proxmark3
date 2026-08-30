@@ -1910,8 +1910,8 @@ static int CmdPing(const char *Cmd) {
     uint32_t len = arg_get_u32_def(ctx, 1, 32);
     CLIParserFree(ctx);
 
-    if (len > PM3_CMD_DATA_SIZE)
-        len = PM3_CMD_DATA_SIZE;
+    if (len > g_conn.pm3_cmd_data_size)
+        len = g_conn.pm3_cmd_data_size;
 
     if (len) {
         PrintAndLogEx(INFO, "Ping sent with payload len... " _YELLOW_("%d"), len);
@@ -1921,7 +1921,8 @@ static int CmdPing(const char *Cmd) {
 
     clearCommandBuffer();
     PacketResponseNG resp;
-    uint8_t data[PM3_CMD_DATA_SIZE] = {0};
+    uint8_t data[g_conn.pm3_cmd_data_size];
+    memset(data, 0, sizeof(data));
 
     for (uint16_t i = 0; i < len; i++) {
         data[i] = i & 0xFF;
@@ -2396,7 +2397,7 @@ void pm3_version_short(void) {
                 uint32_t id;
                 uint32_t section_size;
                 uint32_t versionstr_len;
-                char versionstr[PM3_CMD_DATA_SIZE - 12];
+                char versionstr[g_conn.pm3_cmd_data_size - 12];
             } PACKED;
 
             struct p *payload = (struct p *)&resp.data.asBytes;
@@ -2436,7 +2437,7 @@ void pm3_version_short(void) {
             PrintAndLogEx(NORMAL, "");
 
             // client
-            char temp[PM3_CMD_DATA_SIZE - 12]; // same limit as for ARM image
+            char temp[g_conn.pm3_cmd_data_size - 12]; // same limit as for ARM image
             format_version_information_short(temp, sizeof(temp), &g_version_information);
             PrintAndLogEx(NORMAL, "    Client.... %s", temp);
 
@@ -2484,7 +2485,7 @@ void pm3_version_short(void) {
 
 void pm3_version(bool verbose, bool oneliner) {
 
-    char temp[PM3_CMD_DATA_SIZE - 12]; // same limit as for ARM image
+    char temp[g_conn.pm3_cmd_data_size - 12]; // same limit as for ARM image
 
     if (oneliner) {
         // For "proxmark3 -v", simple printf, avoid logging
@@ -2598,7 +2599,7 @@ void pm3_version(bool verbose, bool oneliner) {
                 uint32_t id;
                 uint32_t section_size;
                 uint32_t versionstr_len;
-                char versionstr[PM3_CMD_DATA_SIZE - 12];
+                char versionstr[g_conn.pm3_cmd_data_size - 12];
             } PACKED;
 
             struct p *payload = (struct p *)&resp.data.asBytes;

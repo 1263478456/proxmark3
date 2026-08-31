@@ -1,0 +1,33 @@
+name: Build PM3 Windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup ProxSpace
+        run: |
+          git clone --depth 1 https://github.com/Gator96100/ProxSpace.git C:/ProxSpace
+        shell: bash
+
+      - name: Build
+        run: |
+          cd C:/ProxSpace
+          ./pm3-dev.sh -c "cd /pm3 && make clean && make all PLATFORM=PM3OTHER"
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm3-windows-build
+          path: |
+            client/proxmark3.exe
+            client/flasher.exe
+            client/bootrom.elf
+            armsrc/obj/fullimage.elf
+            bootrom/obj/bootrom.elf
+            recovery/proxmark3_recovery.bin

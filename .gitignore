@@ -147,4 +147,4 @@ _codeql*
 # Pyton venvs
 venv/
 #Claude AI files
-CLAUDE.md
+CLAUDE.md# build trigger

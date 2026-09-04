@@ -91,7 +91,7 @@ jobs:
         run: make clean
 
       - name: Build PM3OTHER
-        run: make -j $([System.Environment]::ProcessorCount + 1) V=1 PLATFORM=PM3OTHER
+        run: make -j $([System.Environment]::ProcessorCount + 1) V=1 PLATFORM=PM3OTHER SKIPQT=1
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

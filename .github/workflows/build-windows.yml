@@ -1,0 +1,105 @@
+name: Build PM3 Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/build-windows.yml']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PATH: C:/ProxSpace/msys2/ucrt64/bin;C:/ProxSpace/msys2/usr/local/bin;C:/ProxSpace/msys2/usr/bin;C:/ProxSpace/msys2/bin
+      MSYSTEM: UCRT64
+      PYTHONHOME: /ucrt64
+
+    steps:
+      - name: ProxSpace download
+        run: Invoke-WebRequest "https://github.com/Gator96100/ProxSpace/archive/master.zip" -outfile "C:\proxspace.zip" -Passthru
+
+      - name: ProxSpace extract
+        run: Expand-Archive -LiteralPath "C:\proxspace.zip" -DestinationPath "C:\"
+
+      - name: ProxSpace delete zip
+        run: Remove-Item "C:\proxspace.zip"
+
+      - name: ProxSpace rename folder
+        run: Get-ChildItem -Path "C:\ProxSpace-*" | Rename-Item -NewName (Split-Path C:\ProxSpace -Leaf)
+
+      - name: ProxSpace overwrite packages.txt for UCRT64
+        run: |
+          @'
+          ##############################
+          #         General           #
+          ##############################
+          git
+          make
+          pkg-config
+          mingw-w64-ucrt-x86_64-cmake
+          procps
+          base-devel
+          ##############################
+          #         Proxmark3         #
+          ##############################
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-arm-none-eabi-gcc
+          mingw-w64-ucrt-x86_64-arm-none-eabi-gdb
+          mingw-w64-ucrt-x86_64-arm-none-eabi-binutils
+          mingw-w64-ucrt-x86_64-arm-none-eabi-newlib
+          mingw-w64-ucrt-x86_64-readline
+          mingw-w64-ucrt-x86_64-libsndfile
+          mingw-w64-ucrt-x86_64-lua
+          mingw-w64-ucrt-x86_64-bzip2
+          mingw-w64-ucrt-x86_64-python
+          mingw-w64-ucrt-x86_64-python-pip
+          mingw-w64-ucrt-x86_64-python-setuptools
+          mingw-w64-ucrt-x86_64-python-cryptography
+          mingw-w64-ucrt-x86_64-jansson
+          mingw-w64-ucrt-x86_64-qt6-base
+          mingw-w64-ucrt-x86_64-gdb
+          mingw-w64-ucrt-x86_64-openocd
+          mingw-w64-ucrt-x86_64-opencl-icd
+          mingw-w64-ucrt-x86_64-lz4
+          mingw-w64-ucrt-x86_64-libgd
+          mingw-w64-ucrt-x86_64-openssl
+          '@ | Set-Content -Path "C:\ProxSpace\setup\packages.txt" -Encoding UTF8
+
+      - name: ProxSpace initial startup
+        working-directory: C:\ProxSpace
+        run: |
+            $maxAttempts = 3
+            $delay = 20
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+                Write-Host "Attempt $i..."
+                ./runme64.bat -c "exit"
+                if ($LASTEXITCODE -eq 0) { exit 0 }
+                if ($i -lt $maxAttempts) { Start-Sleep -Seconds $delay }
+            }
+            exit 1
+
+      - uses: actions/checkout@v4
+
+      # workaround: "error: linker script file 'xxxx' appears multiple times"
+      - name: Downgrade ARM linker (Windows, temporary)
+        run: pacman -U --noconfirm https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-arm-none-eabi-binutils-2.46.1-1-any.pkg.tar.zst
+
+      - name: make clean
+        run: make clean
+
+      - name: Build PM3OTHER
+        run: make -j $([System.Environment]::ProcessorCount + 1) V=1 PLATFORM=PM3OTHER
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm3-windows-build
+          path: |
+            client/proxmark3.exe
+            client/flasher.exe
+            bootrom/obj/bootrom.elf
+            armsrc/obj/fullimage.elf
+            recovery/proxmark3_recovery.bin

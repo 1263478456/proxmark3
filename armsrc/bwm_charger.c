@@ -75,6 +75,7 @@
 // cannot reroute VBUS to the charger input. It only ensures that when the charger
 // HAS input, its path is enabled.
 void bwm_charger_kick(void) {
+    StartTicks();
     I2C_init(true);
     WaitMS(2);   // let the bus settle
 
@@ -124,6 +125,7 @@ void bwm_print_battery_status(void) {
     }
     DbpString(_CYAN_("Battery / BWM"));
 
+    StartTicks();
     I2C_init(true);
     WaitMS(2);   // let the bus settle
 
@@ -235,7 +237,7 @@ void bwm_print_battery_status(void) {
             }
             unsigned health = (unsigned)(((uint32_t)fcc * 100) / design);
             Dbprintf("  Full charge cap..... %u mAh (design %u)", fcc, design);
-            Dbprintf("  Battery health...... %u %% " _YELLOW_("(needs a full cycle to be accurate)"), health);
+            Dbprintf("  Battery health...... %u", health);
         }
     } else {
         Dbprintf("  Fuel gauge.......... " _YELLOW_("not responding") " (BQ27427 absent or I2C down)");
@@ -327,11 +329,11 @@ uint16_t bwm_charger_set_vchg(uint16_t mv) {
 // Program Design Capacity (and matching Design Energy). Idempotent: returns true
 // without a config-update cycle if the value is already correct.
 bool bwm_gauge_provision_capacity(uint16_t cap_mah) {
+
     uint16_t cur = 0;
     if (bq_read_design_cap(&cur) && cur == cap_mah) {
         return true;    // already correct - do NOT run another CFGUPDATE cycle
     }
-
     uint16_t energy_mwh = (uint16_t)(((uint32_t)cap_mah * 37) / 10);   // ~3.7 V nominal
 
     // Enter CONFIG_UPDATE and wait for the gauge to acknowledge it.
@@ -389,6 +391,7 @@ bool bwm_gauge_provision_capacity(uint16_t cap_mah) {
 //
 // Probe for the BWM charger over I2C and, if found, apply the charge configuration.
 void bwm_detect_and_init(void) {
+    StartTicks();
     I2C_init(true);
 
     // Single bounded probe. Any non-ACK => no BWM fitted; skip everything.
@@ -471,12 +474,16 @@ void bwm_lowbatt_check(void) {
     static uint32_t last_tick = 0;
 #ifdef WITH_PM5_LOWBATT_SHUTDOWN
     static uint8_t crit = 0;
+    static bool s_vusb_setup = false;
 #endif
 
     if ((last_tick != 0) && (GetTickCountDelta(last_tick) < BWM_LOWBATT_PERIOD_MS)) {
         return;
     }
     last_tick = GetTickCount();
+
+    StartTicks();
+    I2C_init(true);
 
     uint8_t sysstat = 0;
     if (I2C_BufferReadRaw(&sysstat, 1, BWM_CHG_REG_SYSSTAT, BWM_CHG_ADDR) <= 0) {
@@ -503,11 +510,23 @@ void bwm_lowbatt_check(void) {
     // uncalibrated gauge - e.g. <3% reported at 3.6 V). Never let SoC alone
     // trigger power-off: require the pack to also be in the low-batt zone.
     if ((mv <= BWM_SHUTDOWN_MV) ||
-            ((soc <= BWM_SHUTDOWN_SOC_PCT) && (mv <= BWM_LOWBATT_MV))) {        if (++crit >= BWM_SHUTDOWN_CONFIRMATIONS) {
-            bwm_beep_low_batt();   // final audible warning before cut-off
-            LEDsoff();
-            Gpio_ARM_Power_ON_Low();
-            while (1);             // wait for hardware power-off
+            ((soc <= BWM_SHUTDOWN_SOC_PCT) && (mv <= BWM_LOWBATT_MV))) {
+        if (++crit >= BWM_SHUTDOWN_CONFIRMATIONS) {
+            // Confirm on the VUSB pin, not the charger PG bit: PG can read
+            // "power fail" on USB under load, so only power off if USB is really out.
+            if (s_vusb_setup == false) {
+                gpio_vusb_setup();
+                s_vusb_setup = true;
+            }
+            if (Gpio_VUSB_Read()) {
+                crit = 0;          // USB present, not a real drain
+            } else {
+                Dbprintf(_RED_("[BWM] critical battery %u mV / %u%% - powering off"), mv, soc);
+                bwm_beep_low_batt();   // last warning before cut-off
+                LEDsoff();
+                Gpio_ARM_Power_ON_Low();
+                while (1);             // wait for power-off
+            }
         }
     } else {
         crit = 0;                  // recovered above the floor -> reset the streak

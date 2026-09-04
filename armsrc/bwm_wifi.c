@@ -225,25 +225,52 @@ int bwm_wifi_forward_up(const char *ssid, const char *password,
     return PM3_SUCCESS;
 }
 
-int bwm_wifi_forward_status(uint8_t *connected, uint32_t *ip_out) {
+int bwm_wifi_forward_status(uint8_t *state, uint32_t *ip_out) {
     const uint32_t TO = 2000;
-    uint32_t ip = 0;
-    uint8_t ipb[12];
-    uint16_t il = sizeof(ipb);
-    int r = bwm_cmd(BWM_CMD_GET_WIFI_CFG_IP_ADDR, NULL, 0, ipb, &il, TO);
-    if (r != PM3_SUCCESS) {
-        return r;   // BWM / UART not responding
+    *ip_out = 0;
+    *state  = BWM_WIFI_STATE_OFF;
+
+    // Ask the ESP for the WiFi connect state (not just the IP): this tells apart
+    // off / disconnected / connecting / connected, which the IP alone cannot.
+    uint8_t st = 0;
+    uint16_t sl = sizeof(st);
+    int r = bwm_cmd(BWM_CMD_GET_WIFI_CONNECT_STATUS, NULL, 0, &st, &sl, TO);
+    if (r == PM3_ETIMEOUT) {
+        return r;                        // BWM genuinely not responding
     }
-    if (il >= 4) {
-        ip = (uint32_t)ipb[0] | ((uint32_t)ipb[1] << 8) | ((uint32_t)ipb[2] << 16) | ((uint32_t)ipb[3] << 24);
+    if (r != PM3_SUCCESS || sl < 1) {
+        *state = BWM_WIFI_STATE_OFF;      // BWM answered; WiFi subsystem is off (BLE-only)
+        return PM3_SUCCESS;
     }
-    *ip_out = ip;
-    *connected = (ip != 0) ? 1 : 0;   // a lease == a usable connection
+    *state = st;                         // 0 down, 1 connecting, 2 connected, 3 reconnecting, 4 stopped
+
+    // Only chase an IP when actually connected.
+    if (st == BWM_WIFI_STATE_CONNECTED) {
+        uint8_t ipb[12];
+        uint16_t il = sizeof(ipb);
+        if ((bwm_cmd(BWM_CMD_GET_WIFI_CFG_IP_ADDR, NULL, 0, ipb, &il, TO) == PM3_SUCCESS) && (il >= 4)) {
+            *ip_out = (uint32_t)ipb[0] | ((uint32_t)ipb[1] << 8) | ((uint32_t)ipb[2] << 16) | ((uint32_t)ipb[3] << 24);
+        }
+    }
     return PM3_SUCCESS;
 }
 
 int bwm_wifi_forward_down(void) {
-    // Single command: the BWM deinits the TCP server + disconnects the STA and
-    // returns to BLE-only. It persists the disable mode to NVS.
-    return step(BWM_CMD_SET_TO_WIFI_DISABLE_MODE, NULL, 0, NULL, NULL, 2000, "wifi disable");
+    // Once WiFi is gone the status query returns a non-timeout error.
+    (void)bwm_cmd(BWM_CMD_SET_TO_WIFI_DISABLE_MODE, NULL, 0, NULL, NULL, 3000);
+
+    uint32_t t0 = GetTickCount();
+    while (GetTickCountDelta(t0) < 12000) {   // overall cap
+        uint8_t st = 0;
+        uint16_t sl = sizeof(st);
+        int q = bwm_cmd(BWM_CMD_GET_WIFI_CONNECT_STATUS, NULL, 0, &st, &sl, 500);
+        // ETIMEOUT while the ESP is busy tearing down -> keep waiting.
+        // SUCCESS with a state -> still up mid-teardown -> keep waiting.
+        // any other (EFAILED etc.) -> BWM answered but WiFi is gone -> disabled.
+        if (q != PM3_SUCCESS && q != PM3_ETIMEOUT) {
+            return PM3_SUCCESS;
+        }
+        SpinDelay(300);
+    }
+    return PM3_ETIMEOUT;
 }

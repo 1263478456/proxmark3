@@ -47,6 +47,11 @@
 
 #define BWM_CMD_SEND_FORWARD_DATA   5000   // host cmd: payload -> BLE/WiFi endpoint
 #define BWM_CMD_DATA_FORWARD        8089   // slave bcast: payload came from endpoint
+// System command: set the ESP<->AT32 UART baud (app_com_defs.h, enum @1000).
+// SET is a HOST_CMD carrying u32 LE baud; the ESP replies with a SLAVE_RESP
+// echoing this cmd (len 0) at the OLD baud, then commits to the new baud.
+#define BWM_CMD_SET_UART_BAUD       1011
+#define BWM_CMD_GET_UART_BAUD       1009   // read back the ESP's live baud (negotiation verify)
 // Flow control (ack window) - ARM-side only, no BWM firmware change required.
 // The ESP already replies to every forward frame with a SLAVE_RESP echoing
 // cmd=SEND_FORWARD_DATA, and it sends that ack only *after* app_ble_send() has
@@ -55,9 +60,19 @@
 // flight, then block for an ack before sending more - which paces us to the real
 // BLE/WiFi rate and prevents the ESP UART-RX overrun that dropped bulk downloads.
 // WINDOW frames must fit the ESP UART RX FIFO + wireless send buffer.
-#define BWM_FC_WINDOW               4      // max un-acked forward frames in flight
-#ifndef BWM_FC_ACK_TIMEOUT_SPINS
-#define BWM_FC_ACK_TIMEOUT_SPINS    200000 // safety valve: proceed if an ack is lost (avoid hard hang)
+// Ceiling on un-acked forward frames. On a download the ESP acks steadily so
+// this never bites; it only matters on a bidirectional UPLOAD, where the ESP
+// defers the small acks while forwarding large incoming chunks. A tight value
+// (4) let inflight hit the cap and stall the AT32 past the client timeout, so
+// keep enough headroom to ride out delayed acks. Only ~1 response is ever
+// really in flight during an upload, so this does not risk an ESP overrun.
+#define BWM_FC_WINDOW               16     // max un-acked forward frames in flight
+#ifndef BWM_FC_ACK_TIMEOUT_MS
+// Hard cap (ms) on how long a forward write may block the main loop waiting for
+// acks. A spin COUNT was unbounded in wall-clock time and could hang the main
+// loop long enough that the client gives up and the device looks dead (USB still
+// enumerates on interrupts). Time-bounded => the main loop is always serviced.
+#define BWM_FC_ACK_TIMEOUT_MS       50     // safety valve: proceed if acks stall, never hard-hang
 #endif // safety valve: give up waiting for credit (avoid hard hang)
 
 #define BWM_CRC16_POLY  0x1021
@@ -76,5 +91,12 @@ uint32_t bwm_read_ng(uint8_t *data, size_t len);
 
 // >0 when raw bytes are waiting on the FPC USART (gate for receive_ng()).
 uint16_t bwm_fwd_rxdata_available(void);
+
+// Bring the ESP<->AT32 UART to `target` baud: adopt it if the ESP is already
+// there (its baud survives an AT32-only reset), else negotiate up via app_com
+// cmd 1011 and re-init UART4 to match. Returns true if the link runs at
+// `target`; false (left at the boot baud) if no ESP answered or the switch
+// could not be verified. Call once after bwm_uart_init().
+bool bwm_fwd_negotiate_baud(uint32_t target);
 
 #endif // __BWM_FORWARD_H

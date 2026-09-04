@@ -25,10 +25,20 @@
 // Use it e.g. when using slow links such as BT
 #define USART_SLOW_LINK
 
+#if defined(ON_DEVICE) && !defined(PM5)
 #define PM3_CMD_DATA_SIZE 624
+#else
+#define PM3_CMD_DATA_SIZE 4064   // PM5 firmware and the client
+#endif
+
 // OLD frames are pinned at 512 independently of PM3_CMD_DATA_SIZE:
 // the bootloader only speaks OLD
 #define PM3_CMD_DATA_SIZE_OLD 512
+
+// Over the BWM/FPC link the forward buffers (AT32 DMA ring, ESP UART RX) are
+// small, so a full PM3_CMD_DATA_SIZE frame overruns them. Cap the payload the
+// device advertises and sends when replying via FPC. USB is unaffected.
+#define PM3_FPC_MAX_DATA 2048
 
 typedef struct {
     uint64_t cmd;
@@ -262,7 +272,7 @@ typedef struct {
     bool is_pm5 : 1;
     bool is_pm5_std_ant : 1;
 
-    // Appended in version 9. Fields must only ever be APPENDED here: 
+    // Appended in version 9. Fields must only ever be APPENDED here:
     // the client accepts a shorter struct from older firmware
     // PM5 can use this to inform which size they support oo.
     uint16_t max_cmd_data_size;     // device side PM3_CMD_DATA_SIZE
@@ -356,7 +366,7 @@ typedef struct {
 
 typedef struct {
     // 64KB SRAM -> 524288 bits(max sample num) < 2^30
-uint32_t samples :
+    uint32_t samples :
     LF_SAMPLES_BITS;
     bool realtime : 1;
     bool verbose : 1;
@@ -473,8 +483,11 @@ typedef struct {
 // CMD_LF_HITAGS_SIMULATE / CMD_LF_HITAGU_SIMULATE payload
 typedef struct {
     uint8_t tag_mem_supplied;
-    uint8_t rfu;
+    uint8_t flags;              // bit0: invert load modulation polarity
     uint16_t threshold;
+    uint16_t twait;             // tag response delay in T0, 0 = firmware default
+    uint8_t sof;                // SOF bits in the tag answer, 0 = firmware default (5)
+    uint8_t duty;               // carrier periods loaded per half bit, 0 = firmware default (16)
     uint8_t data[];
 } PACKED hitag_sim_t;
 

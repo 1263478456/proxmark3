@@ -40,22 +40,6 @@ static serial_port sp = NULL;
 communication_arg_t g_conn;
 capabilities_t g_pm3_capabilities;
 
-// Largest NG payload the attached device accepts.
-//
-// zero means no completed a capabilities handshake yet, 
-// Fall back to the OLD size 512,
-// Note a pre-v9 device does not reach this branch, TestProxmark() fills the field in for it.
-//
-// Capped by PM3_CMD_DATA_SIZE as well, since that is what sizes our own buffers.
-uint16_t pm3_max_cmd_data_size(void) {
-
-    uint16_t devmax = g_pm3_capabilities.max_cmd_data_size;
-    if (devmax == 0) {
-        devmax = CAPABILITIES_LEGACY_CMD_DATA_SIZE;
-    }
-    return MIN(devmax, (uint16_t)PM3_CMD_DATA_SIZE);
-}
-
 static pthread_t communication_thread;
 static pthread_t reconnect_thread;
 
@@ -116,7 +100,8 @@ bool WaitForTxIdle(uint32_t ms_timeout) {
         if (msclock() - start >= ms_timeout) {
             return false;
         }
-        msleep(1);
+        
+        xyield(); // just to avoid CPU busy loop
     }
 }
 
@@ -194,7 +179,7 @@ void SendCommandNG(uint16_t cmd, uint8_t *data, size_t len) {
         PrintAndLogEx(INFO, "Sending bytes to proxmark failed - offline");
         return;
     }
-    uint16_t maxlen = pm3_max_cmd_data_size();
+    uint16_t maxlen = g_conn.max_cmd_data_size;
     if (len > maxlen) {
         PrintAndLogEx(WARNING, "Sending " _RED_("%zu") " bytes of payload is too much for this device (max " _YELLOW_("%u") "), abort", len, maxlen);
         return;
@@ -659,7 +644,23 @@ __attribute__((force_align_arg_pointer))
         }
 
         is_receiving_raw_last = is_receiving_raw;
-        // TODO if error, shall we resync ?
+
+        // Resync after a framing error.
+        if (error && (is_receiving_raw == false)) {
+            uint8_t discard[256];
+            uint32_t discarded = 0;
+            for (uint8_t round = 0; round < 32; round++) {
+                uint32_t drained = 0;
+                if (uart_receive(sp, discard, sizeof(discard), &drained) != PM3_SUCCESS) {
+                    break;
+                }
+                if (drained == 0) {
+                    break;
+                }
+                discarded += drained;
+            }
+            PrintAndLogEx(WARNING, "Resynchronising, dropped %u byte(s)", discarded);
+        }
 
         pthread_mutex_lock(&txBufferMutex);
 
@@ -900,6 +901,8 @@ int SetHfFieldTimeout(uint32_t timeout_sec, bool quiet) {
 // check if we can communicate with Pm3
 int TestProxmark(pm3_device_t *dev) {
 
+    g_conn.max_cmd_data_size = CAPABILITIES_LEGACY_CMD_DATA_SIZE;
+
     uint16_t len = 32;
     uint8_t data[len];
     for (uint16_t i = 0; i < len; i++) {
@@ -948,6 +951,7 @@ int TestProxmark(pm3_device_t *dev) {
 
     g_conn.send_via_fpc_usart = g_pm3_capabilities.via_fpc;
     g_conn.uart_speed = g_pm3_capabilities.baudrate;
+    g_conn.max_cmd_data_size = MIN(g_pm3_capabilities.max_cmd_data_size, (uint16_t)PM3_CMD_DATA_SIZE);
 
     bool is_tcp_conn = (g_conn.send_via_ip == PM3_TCPv4 || g_conn.send_via_ip == PM3_TCPv6);
     bool is_bt_conn = (memcmp(g_conn.serial_port_name, "bt:", 3) == 0);
@@ -960,7 +964,7 @@ int TestProxmark(pm3_device_t *dev) {
                   (is_udp_conn) ? " over " _GREEN_("UDP") : ""
                  );
     PrintAndLogEx(SUCCESS, "Max frame size: " _GREEN_("%u") " bytes",
-                  g_pm3_capabilities.max_cmd_data_size);
+                  g_conn.max_cmd_data_size);
     if (g_conn.send_via_fpc_usart) {
         PrintAndLogEx(SUCCESS, "PM3 UART serial baudrate: " _GREEN_("%u") "\n", g_conn.uart_speed);
     } else {
@@ -1171,8 +1175,8 @@ bool WaitForResponseTimeoutW(uint32_t cmd, PacketResponseNG *response, size_t ms
             PrintAndLogEx(INFO, "You can cancel this operation by pressing the pm3 button");
             show_warning = false;
         }
-        // just to avoid CPU busy loop:
-        msleep(1);
+
+        xyield(); // just to avoid CPU busy loop
     }
     return false;
 }

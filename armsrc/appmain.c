@@ -24,6 +24,7 @@
 #include "usb_cdc_apis.h"
 #ifdef WITH_BWM_FORWARD
 #include "bwm_uart_at32.h"
+#include "bwm_forward.h"   // bwm_fwd_negotiate_baud()
 #include "bwm_wifi.h"
 #endif
 #include "proxmark3_arm.h"
@@ -538,8 +539,9 @@ static void printConnSpeed(uint32_t wait) {
     LED_B_ON();
 
     while (delta_time < wait) {
-        reply_ng(CMD_DOWNLOADED_BIGBUF, PM3_SUCCESS, test_data, PM3_CMD_DATA_SIZE);
-        bytes_transferred += PM3_CMD_DATA_SIZE;
+        uint16_t st_len = reply_ng_max_data_size();
+        reply_ng(CMD_DOWNLOADED_BIGBUF, PM3_SUCCESS, test_data, st_len);
+        bytes_transferred += st_len;
         frames_sent++;
         delta_time = GetTickCountDelta(start_time);
     }
@@ -584,6 +586,9 @@ static void SendStatus(uint32_t wait) {
 #endif
 #if defined(PM5) && defined(WITH_BWM_STATUS)
     bwm_print_battery_status();
+#endif
+#ifdef WITH_BWM_FORWARD
+    Dbprintf("  BWM link baud....... " _YELLOW_("%u") " bps", bwm_uart_get_baud());
 #endif
     printConnSpeed(wait);
     DbpString(_CYAN_("Various"));
@@ -690,7 +695,7 @@ static void SendStatus(uint32_t wait) {
 static void SendCapabilities(void) {
     capabilities_t capabilities = {0};
     capabilities.version = CAPABILITIES_VERSION;
-    capabilities.max_cmd_data_size = PM3_CMD_DATA_SIZE;
+    capabilities.max_cmd_data_size = reply_ng_max_data_size();
     capabilities.via_fpc = g_reply_via_fpc;
     capabilities.via_usb = g_reply_via_usb;
     capabilities.bigbuf_size = BigBuf_get_size();
@@ -700,10 +705,11 @@ static void SendCapabilities(void) {
         capabilities.baudrate = g_usart_baudrate;
 #endif
 #ifdef WITH_BWM_FORWARD
-    // BWM link runs at a fixed baud; report it so the client's timeout math
-    // (communication_delay: 12000000 / uart_speed) doesn't divide by zero.
+    // Report the negotiated link baud so the client's timeout math
+    // (communication_delay: 12000000 / uart_speed) matches reality and never
+    // divides by zero.
     if (g_reply_via_fpc)
-        capabilities.baudrate = BWM_UART_BAUD;
+        capabilities.baudrate = bwm_uart_get_baud();
 #endif
 
 #ifdef RDV4
@@ -1600,13 +1606,30 @@ static void PacketReceived(PacketCommandNG *packet) {
 
 #ifdef WITH_HITAG
         case CMD_LF_HITAG_SNIFF: { // Eavesdrop Hitag tag, args = type
-            SniffHitag2(true);
+            // threshold comes from `lf hitag sniff -t`, 0 = the slope default
+            uint8_t sniff_thr = (packet->length >= 1) ? packet->data.asBytes[0] : 0;
+            SniffHitag2(true, sniff_thr);
             //hitag_sniff();
             reply_ng(CMD_LF_HITAG_SNIFF, PM3_SUCCESS, NULL, 0);
             break;
         }
-        case CMD_LF_HITAG_SIMULATE: { // Simulate Hitag tag, args = memory content
-            SimulateHitag2(true);
+        case CMD_LF_HITAG_SIMULATE: {
+            // The tag content comes from emulator memory, so the payload only
+            // carries the edge detect threshold.  Older clients send nothing.
+            uint8_t threshold = 127;
+            uint16_t twait = 0;
+            uint8_t flags = 0;
+            uint8_t sof = 0;
+            uint8_t duty = 0;
+            if (packet->length >= sizeof(hitag_sim_t)) {
+                hitag_sim_t *payload = (hitag_sim_t *)packet->data.asBytes;
+                threshold = (uint8_t)payload->threshold;
+                twait = payload->twait;
+                flags = payload->flags;
+                sof = payload->sof;
+                duty = payload->duty;
+            }
+            SimulateHitag2(threshold, twait, flags, sof, duty, true);
             break;
         }
         case CMD_LF_HITAG2_CRACK: {
@@ -1640,7 +1663,7 @@ static void PacketReceived(PacketCommandNG *packet) {
                 break;
             }
             hitag_sim_t *payload = (hitag_sim_t *)packet->data.asBytes;
-            hts_simulate((bool)payload->tag_mem_supplied, payload->threshold, payload->data, true);
+            hts_simulate((int8_t)payload->threshold, true);
             break;
         }
         case CMD_LF_HITAGS_TEST_TRACES: { // Tests every challenge within the given file
@@ -1689,7 +1712,7 @@ static void PacketReceived(PacketCommandNG *packet) {
                 break;
             }
             hitag_sim_t *payload = (hitag_sim_t *)packet->data.asBytes;
-            htu_simulate((bool)payload->tag_mem_supplied, payload->threshold, payload->data, true);
+            htu_simulate((int8_t)payload->threshold, true);
             break;
         }
         case CMD_LF_HITAGU_UID: {
@@ -2170,8 +2193,7 @@ static void PacketReceived(PacketCommandNG *packet) {
             break;
         }
         case CMD_HF_ISO14443A_SNIFF: {
-            SniffIso14443a(packet->data.asBytes[0]);
-            reply_ng(CMD_HF_ISO14443A_SNIFF, PM3_SUCCESS, NULL, 0);
+            reply_ng(CMD_HF_ISO14443A_SNIFF, SniffIso14443a(packet->data.asBytes[0]), NULL, 0);
             break;
         }
         case CMD_HF_HIDCONFIG_SNIFF: {
@@ -3117,8 +3139,9 @@ static void PacketReceived(PacketCommandNG *packet) {
             // arg2 = BigBuf tracelen
             //Dbprintf("transfer to client parameters: %" PRIu32 " | %" PRIu32 " | %" PRIu32, startidx, numofbytes, packet->oldarg[2]);
 
-            for (size_t offset = 0; offset < numofbytes; offset += DOWNLOAD_CHUNK_MAX) {
-                size_t len = MIN((numofbytes - offset), DOWNLOAD_CHUNK_MAX);
+            const size_t dl_chunk = reply_ng_max_data_size() - sizeof(download_chunk_t);
+            for (size_t offset = 0; offset < numofbytes; offset += dl_chunk) {
+                size_t len = MIN((numofbytes - offset), dl_chunk);
                 int result = reply_download_chunk(CMD_DOWNLOADED_BIGBUF, offset, &mem[startidx + offset], len);
                 if (result != PM3_SUCCESS)
                     Dbprintf("transfer to client failed ::  | bytes between %d - %d (%d) | result: %d", offset, offset + len, len, result);
@@ -3179,8 +3202,9 @@ static void PacketReceived(PacketCommandNG *packet) {
             // arg1 = length bytes to transfer
             // arg2 = RFU
 
-            for (size_t i = 0; i < numofbytes; i += DOWNLOAD_CHUNK_MAX) {
-                size_t len = MIN((numofbytes - i), DOWNLOAD_CHUNK_MAX);
+            const size_t dl_chunk = reply_ng_max_data_size() - sizeof(download_chunk_t);
+            for (size_t i = 0; i < numofbytes; i += dl_chunk) {
+                size_t len = MIN((numofbytes - i), dl_chunk);
                 int result = reply_download_chunk(CMD_DOWNLOADED_EML_BIGBUF, i, mem + startidx + i, len);
                 if (result != PM3_SUCCESS)
                     Dbprintf("transfer to client failed ::  | bytes between %d - %d (%d) | result: %d", i, i + len, len, result);
@@ -3298,8 +3322,9 @@ static void PacketReceived(PacketCommandNG *packet) {
                 // arg1 = size
                 // arg2 = RFU
 
-                for (size_t i = 0; i < size; i += DOWNLOAD_CHUNK_MAX) {
-                    size_t len = MIN((size - i), DOWNLOAD_CHUNK_MAX);
+                const size_t dl_chunk = reply_ng_max_data_size() - sizeof(download_chunk_t);
+                for (size_t i = 0; i < size; i += dl_chunk) {
+                    size_t len = MIN((size - i), dl_chunk);
                     int result = reply_download_chunk(CMD_SPIFFS_DOWNLOADED, i, buff + i, len);
                     if (result != PM3_SUCCESS)
                         Dbprintf("transfer to client failed ::  | bytes between %d - %d (%d) | result: %d", i, i + len, len, result);
@@ -3515,8 +3540,9 @@ static void PacketReceived(PacketCommandNG *packet) {
                 break;
             }
 
-            for (size_t i = 0; i < numofbytes; i += DOWNLOAD_CHUNK_MAX) {
-                size_t len = MIN((numofbytes - i), DOWNLOAD_CHUNK_MAX);
+            const size_t dl_chunk = reply_ng_max_data_size() - sizeof(download_chunk_t);
+            for (size_t i = 0; i < numofbytes; i += dl_chunk) {
+                size_t len = MIN((numofbytes - i), dl_chunk);
                 Flash_CheckBusy(BUSY_TIMEOUT);
                 uint16_t isok = Flash_ReadDataCont(startidx + i, mem, len);
                 if (isok == false) {
@@ -3898,9 +3924,9 @@ static void PacketReceived(PacketCommandNG *packet) {
                 res = bwm_wifi_forward_down();
                 reply_ng(CMD_PM5_BWM_WIFI, res, (uint8_t *)&ip, sizeof(ip));
             } else if (action == BWM_WIFI_ACTION_STATUS) {
-                uint8_t connected = 0;
-                res = bwm_wifi_forward_status(&connected, &ip);
-                uint8_t st[5] = { connected,
+                uint8_t state = 0;
+                res = bwm_wifi_forward_status(&state, &ip);
+                uint8_t st[5] = { state,
                                   (uint8_t)(ip & 0xFF), (uint8_t)((ip >> 8) & 0xFF),
                                   (uint8_t)((ip >> 16) & 0xFF), (uint8_t)((ip >> 24) & 0xFF) };
                 reply_ng(CMD_PM5_BWM_WIFI, res, st, sizeof(st));
@@ -4011,6 +4037,9 @@ void __attribute__((noreturn)) AppMain(void) {
 
 #ifdef WITH_BWM_FORWARD
     bwm_uart_init();         // AT32 UART4 <-> BWM app_com link; AFTER usb_enable()
+    // Negotiate the link up from the boot baud; harmless no-op if the ESP is
+    // older or the target is unreachable (stays at BWM_UART_BAUD).
+    bwm_fwd_negotiate_baud(BWM_UART_BAUD_TARGET);
 #endif
 
 #ifdef WITH_BWM_CHARGERKICK
